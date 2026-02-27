@@ -180,8 +180,8 @@ class TestReactiveExp:
         with pytest.raises(Exception):
             await root["logs"]
 
-    async def test_bounded_replay_buffer_keeps_recent_items_for_new_iterators(self):
-        root = RNode(max_replay_items=2)
+    async def test_late_subscriber_keeps_full_replay(self):
+        root = RNode()
         ingestor = JSONFeed(root)
         for chunk in ('{"logs":[1,2,3,4]}',):
             ingestor.feed(chunk)
@@ -190,7 +190,7 @@ class TestReactiveExp:
         out = []
         async for item in root["logs"]:
             out.append(item)
-        assert out == [3, 4]
+        assert out == [1, 2, 3, 4]
 
     async def test_missing_key_fails_after_successful_finish(self):
         root = RNode()
@@ -618,7 +618,7 @@ class TestAdversarial:
 
 class TestConfidenceGaps:
     async def test_scalar_inside_object_inside_array_char_by_char(self):
-        """Exercises _consume_scalar with parent node=None, char-by-char."""
+        """Exercises scalar propagation in nested array/object parsing."""
         text = '{"rows":[{"name":"Alice","age":30},{"name":"Bob","age":25}]}'
         root, ingest = _setup(text, chunk_size=1)
 
@@ -648,9 +648,9 @@ class TestConfidenceGaps:
         data, _ = await asyncio.gather(consume(), ingest())
         assert data == [{"tags": [{"label": "x", "weight": 1.5}]}]
 
-    async def test_bounded_replay_live_slow_consumer_falls_behind(self):
-        """Slow consumer with bounded replay loses old items in live mode."""
-        root = RNode(max_replay_items=3)
+    async def test_live_slow_consumer_still_sees_all_items(self):
+        """Slow consumer receives all items with unbounded replay."""
+        root = RNode()
         ingestor = JSONFeed(root)
 
         received = []
@@ -674,9 +674,9 @@ class TestConfidenceGaps:
         await asyncio.gather(slow_consumer(), producer())
         assert received == [1, 2, 3, 4, 5, 6]
 
-    async def test_bounded_replay_late_subscriber_only_gets_recent(self):
-        """Late subscriber after ingestion only gets items still in the buffer."""
-        root = RNode(max_replay_items=3)
+    async def test_late_subscriber_gets_full_history(self):
+        """Late subscriber after ingestion still sees the full history."""
+        root = RNode()
         ingestor = JSONFeed(root)
         ingestor.feed('{"nums":[1,2,3,4,5,6,7,8]}')
         ingestor.finish()
@@ -684,12 +684,11 @@ class TestConfidenceGaps:
         out = []
         async for item in root["nums"]:
             out.append(item)
-        assert out == [6, 7, 8]
+        assert out == [1, 2, 3, 4, 5, 6, 7, 8]
 
-    async def test_bounded_replay_sync_bulk_feed_snaps_forward(self):
-        """Sync bulk feed with bounded buffer evicts items before cursor can read.
-        Cursor snaps forward — gets only the items still in the buffer."""
-        root = RNode(max_replay_items=2)
+    async def test_sync_bulk_feed_keeps_full_history(self):
+        """Sync bulk feed still preserves full history for iteration."""
+        root = RNode()
         ingestor = JSONFeed(root)
 
         async def consumer():
@@ -703,11 +702,11 @@ class TestConfidenceGaps:
             ingestor.finish()
 
         result, _ = await asyncio.gather(consumer(), producer())
-        assert result == [4, 5]
+        assert result == [1, 2, 3, 4, 5]
 
-    async def test_bounded_replay_async_drip_feed_keeps_all(self):
-        """With async yields between items, consumer keeps up even with small buffer."""
-        root = RNode(max_replay_items=2)
+    async def test_async_drip_feed_keeps_all(self):
+        """With async yields between items, consumer receives all items."""
+        root = RNode()
         ingestor = JSONFeed(root)
 
         async def consumer():

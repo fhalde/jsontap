@@ -1,29 +1,23 @@
 import asyncio
-from collections import deque
 import ijson
 
 _VALUE_EVENTS = frozenset({"string", "number", "boolean", "null"})
 
 
 class RNode:
-    def __init__(self, *, max_replay_items=None, path=()):
+    def __init__(self, *, path=()):
         self.children = {}
         self.future = asyncio.Future()
-        self.max_replay_items = max_replay_items
         self.path = path
         self.sealed = False
-        self.stream_items = deque()
-        self.stream_start_index = 0
+        self.stream_items = []
         self.stream_done = False
         self.stream_error = None
         self._stream_waiters = []
 
     def __getitem__(self, key):
         if key not in self.children:
-            child = RNode(
-                max_replay_items=self.max_replay_items,
-                path=(*self.path, key),
-            )
+            child = RNode(path=(*self.path, key))
             if self.sealed:
                 key_path = ".".join(child.path)
                 child.fail(KeyError(f"Missing key in parsed JSON: {key_path}"))
@@ -37,10 +31,6 @@ class RNode:
 
     def push_stream(self, value):
         self.stream_items.append(value)
-        if self.max_replay_items is not None:
-            while len(self.stream_items) > self.max_replay_items:
-                self.stream_items.popleft()
-                self.stream_start_index += 1
         self._wake_stream_waiters()
 
     def end_stream(self, final_value=None):
@@ -72,19 +62,15 @@ class RNode:
 class _StreamCursor:
     def __init__(self, node):
         self.node = node
-        self.index = node.stream_start_index
+        self.index = 0
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
         while True:
-            if self.index < self.node.stream_start_index:
-                self.index = self.node.stream_start_index
-
-            offset = self.index - self.node.stream_start_index
-            if offset < len(self.node.stream_items):
-                value = self.node.stream_items[offset]
+            if self.index < len(self.node.stream_items):
+                value = self.node.stream_items[self.index]
                 self.index += 1
                 return value
 
@@ -176,14 +162,13 @@ class JSONFeed:
         self._seal_tree(self.root)
         self._closed = True
 
-    def _node_for(self, parts):
-        node = self.root
-        for p in parts:
-            node = node[p]
-        return node
-
     def _current_parent(self):
         return self._container_stack[-1] if self._container_stack else None
+
+    def _next_array_item_node(self, parent):
+        index = parent["next_index"]
+        parent["next_index"] += 1
+        return parent["node"][str(index)]
 
     def _start_container(self, kind):
         parent = self._current_parent()
@@ -195,15 +180,15 @@ class JSONFeed:
             key = parent["key"]
             if key is None:
                 raise RuntimeError("Map value started without a map key.")
-            node = parent["node"][key] if parent["node"] is not None else None
+            node = parent["node"][key]
             parent["value"][key] = value
             parent["key"] = None
         else:
-            node = None
+            node = self._next_array_item_node(parent)
             parent["value"].append(value)
 
         self._container_stack.append(
-            {"type": kind, "value": value, "node": node, "key": None}
+            {"type": kind, "value": value, "node": node, "key": None, "next_index": 0}
         )
 
     def _consume_scalar(self, value):
@@ -217,14 +202,14 @@ class JSONFeed:
             if key is None:
                 raise RuntimeError("Scalar map value arrived without a map key.")
             parent["value"][key] = value
-            if parent["node"] is not None:
-                parent["node"][key].resolve(value)
+            parent["node"][key].resolve(value)
             parent["key"] = None
             return
 
         parent["value"].append(value)
-        if parent["node"] is not None:
-            parent["node"].push_stream(value)
+        item_node = self._next_array_item_node(parent)
+        item_node.resolve(value)
+        parent["node"].push_stream(value)
 
     def _complete_container(self, expected_type):
         if not self._container_stack:
@@ -238,18 +223,13 @@ class JSONFeed:
 
         completed = current["value"]
         node = current["node"]
-        if node is not None:
-            if expected_type == "map":
-                node.resolve(completed)
-            else:
-                node.end_stream(completed)
+        if expected_type == "map":
+            node.resolve(completed)
+        else:
+            node.end_stream(completed)
 
         parent = self._current_parent()
-        if (
-            parent is not None
-            and parent["type"] == "array"
-            and parent["node"] is not None
-        ):
+        if parent is not None and parent["type"] == "array":
             parent["node"].push_stream(completed)
 
     def _apply_event(self, prefix, event, value):
@@ -280,12 +260,7 @@ class JSONFeed:
         self._consume_scalar(value)
 
 
-# -----------------------------
-# Mock LLM Token Stream
-# -----------------------------
-
-
-def jsontap(source=None, *, max_replay_items=None):
+def jsontap(source=None):
     """Create a reactive JSON root and its feeder.
 
     Usage with an async iterable (LLM token stream, etc.):
@@ -304,7 +279,7 @@ def jsontap(source=None, *, max_replay_items=None):
         finish()
         name = await root["name"]
     """
-    root = RNode(max_replay_items=max_replay_items)
+    root = RNode()
     ingestor = JSONFeed(root)
 
     if source is not None:

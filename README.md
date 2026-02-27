@@ -91,17 +91,9 @@ deep = await root["a"]["b"]["c"]["d"]
 
 Child nodes are created on first access, so you can subscribe before the parent has been fully parsed.
 
-## Bounded replay
+## Replay behavior
 
-By default, every streamed array item is kept in memory so late subscribers can replay the full history. For large or unbounded streams, pass `max_replay_items` to cap the buffer:
-
-```python
-root, run = jsontap(source, max_replay_items=100)
-```
-
-- **`None` (default)** — unlimited replay; late iterators see all items from the start.
-- **`0`** — no replay; late iterators only see items pushed after they start.
-- **`N`** — sliding window of the most recent N items.
+`jsontap` keeps streamed array items in memory so late subscribers can replay full history.
 
 ## Error handling
 
@@ -111,7 +103,7 @@ root, run = jsontap(source, max_replay_items=100)
 
 ## API reference
 
-### `jsontap(source=None, *, max_replay_items=None)`
+### `jsontap(source=None)`
 
 Creates a reactive JSON root and its feeder.
 
