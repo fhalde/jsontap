@@ -6,7 +6,9 @@ Consume fields and array items as they arrive – no need to wait for the full p
 
 ## Why Use jsontap?
 
-Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses. **jsontap** allows you to consume structured JSON while it is still streaming:
+Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses. 
+
+**jsontap** allows you to consume structured JSON while it is still streaming:
 
 - Await individual fields as they arrive
 - Async-iterate arrays in real time
@@ -28,7 +30,7 @@ uv add jsontap
 
 ### Practical LLM example
 
-LLM responses can have noticeable latency and can take a while to finish full structured output. With `jsontap`, your app can react as soon as key fields arrive.
+LLM responses can have noticeable latency and can take a while to finish full structured output. With **jsontap**, your app can react as soon as key fields arrive.
 
 Suppose your model streams JSON like:
 
