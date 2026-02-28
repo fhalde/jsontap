@@ -1,6 +1,6 @@
 [project]
 name = "jsontap"
-version = "0.4.1"
+version = "0.4.2"
 description = "Structured, awaitable access to streaming JSON sources."
 readme = "README.md"
 authors = [

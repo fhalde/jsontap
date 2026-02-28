@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from jsontap.main import AsyncJsonNode, AsyncJsonFeed, jsontap
+from jsontap import AsyncJsonNode, AsyncJsonFeed, jsontap
 
 pytest = __import__("pytest")
 

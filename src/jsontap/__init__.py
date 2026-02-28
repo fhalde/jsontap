@@ -1,3 +1,3 @@
-from .main import AsyncJsonNode, jsontap
+from .core import AsyncJsonFeed, AsyncJsonNode, jsontap
 
-__all__ = ["jsontap", "AsyncJsonNode"]
+__all__ = ["jsontap", "AsyncJsonNode", "AsyncJsonFeed"]
