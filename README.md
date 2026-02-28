@@ -2,7 +2,7 @@
 
 Structured, awaitable access to streaming JSON sources.
 
-Consume fields and array items as they arrive – no need to wait for the full payload. Built on top of streaming parsing from [ijson](https://github.com/ICRAR/ijson), you can `await` values or `async for` over arrays as JSON is received incrementally, making it ideal for LLM token streams.
+Consume fields and array items as they arrive – no need to wait for the full payload. Built on top of streaming parsing from [ijson](https://github.com/ICRAR/ijson), you can `await` values or `async for` over arrays as the JSON arrives incrementally, making it ideal for LLM token streams.
 
 ## Why Use jsontap?
 
