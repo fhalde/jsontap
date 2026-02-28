@@ -5,11 +5,6 @@ _VALUE_EVENTS = frozenset({"string", "number", "boolean", "null"})
 _UNSET = object()
 
 
-def _suppress_task_exception(task):
-    if not task.cancelled():
-        task.exception()
-
-
 class RNode:
     def __init__(self, *, path=()):
         self.children = {}
@@ -355,11 +350,8 @@ def jsontap(source=None):
                 ingestor.finish()
             except Exception as exc:
                 ingestor.close_with_error(exc)
-                raise
 
-        task = asyncio.create_task(_drive())
-        task.add_done_callback(_suppress_task_exception)
-        root._task = task
+        root._task = asyncio.create_task(_drive())
         return root
 
     try:
