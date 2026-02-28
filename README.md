@@ -11,7 +11,7 @@ Consume fields and array items as they arrive – no need to wait for the full p
 
 ## Why Use jsontap?
 
-Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses.. **jsontap** allows you to consume structured JSON while it is still streaming:
+Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses. **jsontap** allows you to consume structured JSON while it is still streaming:
 
 - Await individual fields as they arrive
 - Async-iterate arrays in real time
@@ -85,7 +85,7 @@ async def agent():
 asyncio.run(agent())
 ```
 
-This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated whilst giving developers the convenience of writing sequential looking code.
+This is where `jsontap` stands out for LLM products: it enables immediate handling of fields, even as the rest of the JSON continues generating — all while letting developers write code that feels clean and sequential.
 
 ![jsontap streaming demo](show.gif)
 
