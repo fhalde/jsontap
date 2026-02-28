@@ -2,18 +2,39 @@ import asyncio
 import ijson
 
 _VALUE_EVENTS = frozenset({"string", "number", "boolean", "null"})
+_UNSET = object()
+
+
+def _suppress_task_exception(task):
+    if not task.cancelled():
+        task.exception()
 
 
 class RNode:
     def __init__(self, *, path=()):
         self.children = {}
-        self.future = asyncio.Future()
         self.path = path
         self.sealed = False
         self.stream_items = []
         self.stream_done = False
         self.stream_error = None
+        self._future = None
+        self._value = _UNSET
+        self._exception = None
         self._stream_waiters = []
+
+    @property
+    def resolved(self):
+        return self._value is not _UNSET or self._exception is not None
+
+    def _ensure_future(self):
+        if self._future is None:
+            self._future = asyncio.Future()
+            if self._value is not _UNSET:
+                self._future.set_result(self._value)
+            elif self._exception is not None:
+                self._future.set_exception(self._exception)
+        return self._future
 
     def __getitem__(self, key):
         if key not in self.children:
@@ -25,9 +46,32 @@ class RNode:
             self.children[key] = child
         return self.children[key]
 
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self[name]
+
+    @property
+    def value(self):
+        """Synchronous access to the resolved value.
+
+        Raises LookupError if the value hasn't been parsed yet.
+        """
+        if self._value is not _UNSET:
+            return self._value
+        if self._exception is not None:
+            raise self._exception
+        raise LookupError(
+            "Value not yet resolved. "
+            "Use 'await node' in async code, or ensure parsing is complete."
+        )
+
     def resolve(self, value):
-        if not self.future.done():
-            self.future.set_result(value)
+        if self.resolved:
+            return
+        self._value = value
+        if self._future is not None and not self._future.done():
+            self._future.set_result(value)
 
     def push_stream(self, value):
         self.stream_items.append(value)
@@ -35,15 +79,16 @@ class RNode:
 
     def end_stream(self, final_value=None):
         self.stream_done = True
-        # Also make arrays await-able as a fully materialized list.
         self.resolve(list(self.stream_items) if final_value is None else final_value)
         self._wake_stream_waiters()
 
     def fail(self, exc):
         self.stream_error = exc
         self.stream_done = True
-        if not self.future.done():
-            self.future.set_exception(exc)
+        if not self.resolved:
+            self._exception = exc
+            if self._future is not None and not self._future.done():
+                self._future.set_exception(exc)
         self._wake_stream_waiters()
 
     def _wake_stream_waiters(self):
@@ -53,10 +98,21 @@ class RNode:
         self._stream_waiters.clear()
 
     def __await__(self):
-        return self.future.__await__()
+        return self._ensure_future().__await__()
 
     def __aiter__(self):
         return _StreamCursor(self)
+
+    def __iter__(self):
+        """Synchronous iteration over completed stream items."""
+        if not self.stream_done:
+            raise RuntimeError(
+                "Stream not complete. "
+                "Use 'async for' in async code, or ensure parsing is complete."
+            )
+        if self.stream_error is not None:
+            raise self.stream_error
+        return iter(self.stream_items)
 
 
 class _StreamCursor:
@@ -107,7 +163,7 @@ class JSONFeed:
             self._seal_tree(child)
 
     def _fail_unresolved_nodes(self, node):
-        if not node.future.done():
+        if not node.resolved:
             key_path = ".".join(node.path) if node.path else "<root>"
             node.fail(KeyError(f"Missing key in parsed JSON: {key_path}"))
         for child in node.children.values():
@@ -261,30 +317,38 @@ class JSONFeed:
 
 
 def jsontap(source=None):
-    """Create a reactive JSON root and its feeder.
+    """Create a reactive JSON root.
 
-    Usage with an async iterable (LLM token stream, etc.):
+    With an async source — starts a background task, returns the root node:
 
-        root, run = jsontap(llm_stream())
-        async def consume():
-            name = await root["user"]["name"]
-            ...
-        await asyncio.gather(run(), consume())
+        root = jsontap(llm_stream())
+        name = await root.user.name
+        async for item in root.items:
+            process(item)
 
-    Usage with manual feeding:
+    With a sync source — parses eagerly, returns the root node:
+
+        root = jsontap(chunks)
+        name = root.user.name.value
+        for item in root.items:
+            process(item)
+
+    Without a source — returns (root, feed, finish) for manual feeding:
 
         root, feed, finish = jsontap()
-        feed('{"name":')
-        feed('"Alice"}')
+        feed('{"name": "Alice"}')
         finish()
-        name = await root["name"]
+        name = root.name.value
     """
     root = RNode()
     ingestor = JSONFeed(root)
 
-    if source is not None:
+    if source is None:
+        return root, ingestor.feed, ingestor.finish
 
-        async def run():
+    if hasattr(source, "__aiter__"):
+
+        async def _drive():
             try:
                 async for chunk in source:
                     ingestor.feed(chunk)
@@ -293,6 +357,17 @@ def jsontap(source=None):
                 ingestor.close_with_error(exc)
                 raise
 
-        return root, run
+        task = asyncio.create_task(_drive())
+        task.add_done_callback(_suppress_task_exception)
+        root._task = task
+        return root
 
-    return root, ingestor.feed, ingestor.finish
+    try:
+        for chunk in source:
+            ingestor.feed(chunk)
+        ingestor.finish()
+    except Exception as exc:
+        ingestor.close_with_error(exc)
+        raise
+
+    return root
