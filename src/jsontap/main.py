@@ -41,11 +41,6 @@ class RNode:
             self.children[key] = child
         return self.children[key]
 
-    def __getattr__(self, name):
-        if name.startswith("_"):
-            raise AttributeError(name)
-        return self[name]
-
     @property
     def value(self):
         """Synchronous access to the resolved value.

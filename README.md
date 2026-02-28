@@ -61,16 +61,16 @@ async def llm_json_stream():
 async def run_agent_response():
     root = jsontap(llm_json_stream())
 
-    intent = await root.intent
+    intent = await root["intent"]
     print(f"[ROUTING] -> {intent}")
 
-    preview = await root.reply_preview
+    preview = await root["reply_preview"]
     print(f"[PREVIEW] {preview}")
 
-    async for step in root.steps:
+    async for step in root["steps"]:
         print(f"[STEP] {step}")
 
-    final_reply = await root.final_reply
+    final_reply = await root["final_reply"]
     print(f"[FINAL] {final_reply}")
 ```
 
@@ -90,14 +90,12 @@ Each node supports these access patterns:
 
 | Pattern | Use case | Example |
 |---|---|---|
-| `await node` | Get the fully parsed value (scalar, dict, or list) | `name = await root.user.name` |
-| `async for item in node` | Stream array elements as they arrive | `async for row in root.rows: ...` |
-| `node.value` | Synchronous access to a resolved value | `name = root.user.name.value` |
-| `for item in node` | Synchronous iteration over a completed array | `for row in root.rows: ...` |
+| `await node` | Get the fully parsed value (scalar, dict, or list) | `name = await root["user"]["name"]` |
+| `async for item in node` | Stream array elements as they arrive | `async for row in root["rows"]: ...` |
+| `node.value` | Synchronous access to a resolved value | `name = root["user"]["name"].value` |
+| `for item in node` | Synchronous iteration over a completed array | `for row in root["rows"]: ...` |
 
-Nodes are created lazily via attribute access (`root.foo`) or item access (`root["foo"]`) and can be subscribed to before the corresponding JSON has been parsed. Multiple consumers can `await` or iterate the same node concurrently — each gets the full result.
-
-Use `root["key"]` for keys that contain dots, spaces, or collide with RNode attributes like `value` and `resolved`.
+Nodes are created lazily via `node["key"]` and can be subscribed to before the corresponding JSON has been parsed. Multiple consumers can `await` or iterate the same node concurrently — each gets the full result.
 
 ### Arrays: stream vs. await
 
@@ -105,11 +103,11 @@ Arrays support both patterns:
 
 ```python
 # Stream items one by one as they're parsed
-async for item in root.logs:
+async for item in root["logs"]:
     process(item)
 
 # Or await the full materialized list
-all_logs = await root.logs
+all_logs = await root["logs"]
 ```
 
 ### Nested access
@@ -117,7 +115,7 @@ all_logs = await root.logs
 Drill into the tree at any depth:
 
 ```python
-deep = await root.a.b.c.d
+deep = await root["a"]["b"]["c"]["d"]
 ```
 
 Child nodes are created on first access, so you can subscribe before the parent has been fully parsed.
@@ -144,14 +142,14 @@ Creates a reactive JSON root.
 
 ```python
 root = jsontap(async_source)
-name = await root.user.name
+name = await root["user"]["name"]
 ```
 
 **With a sync source** — parses eagerly, returns `RNode`:
 
 ```python
 root = jsontap(sync_source)
-name = root.user.name.value
+name = root["user"]["name"].value
 ```
 
 **No source** — returns `(root, feed, finish)` tuple:
@@ -166,7 +164,7 @@ finish()
 
 | Method / Protocol | Description |
 |---|---|
-| `node.key` or `node[key]` | Get or create a child node for the given key |
+| `node["key"]` | Get or create a child node for the given key |
 | `await node` | Await the resolved value (blocks until parsed) |
 | `async for item in node` | Iterate streamed array items as they arrive |
 | `node.value` | Synchronous access to the resolved value |

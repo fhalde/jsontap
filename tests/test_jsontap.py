@@ -866,66 +866,6 @@ class TestSyncIteration:
         assert out == ["a", "b", "c"]
 
 
-class TestDotAccess:
-    """Tests for RNode.__getattr__ — dot-style access to child nodes."""
-
-    def test_dot_access_scalar(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('{"name": "Alice"}')
-        ingestor.finish()
-        assert root.name.value == "Alice"
-
-    def test_dot_access_nested(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('{"user": {"name": "Bob", "age": 25}}')
-        ingestor.finish()
-        assert root.user.name.value == "Bob"
-        assert root.user.age.value == 25
-
-    async def test_dot_access_await(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('{"greeting": "hello"}')
-        ingestor.finish()
-        assert await root.greeting == "hello"
-
-    async def test_dot_access_async_for(self):
-        text = '{"items": [1, 2, 3]}'
-        root, ingest = _setup(text)
-
-        async def consume():
-            out = []
-            async for item in root.items:
-                out.append(item)
-            return out
-
-        result, _ = await asyncio.gather(consume(), ingest())
-        assert result == [1, 2, 3]
-
-    def test_dot_access_sync_iterate(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('{"tags": ["a", "b"]}')
-        ingestor.finish()
-        assert list(root.tags) == ["a", "b"]
-
-    def test_private_attr_raises_attribute_error(self):
-        root = RNode()
-        with pytest.raises(AttributeError):
-            root._nonexistent
-
-    def test_real_attrs_not_shadowed(self):
-        """Properties like .value and .resolved are NOT intercepted by __getattr__."""
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('{"x": 1}')
-        ingestor.finish()
-        assert root.resolved is True
-        assert root.value == {"x": 1}
-
-
 class TestJsontapWithAsyncSource:
     """Tests for jsontap(async_source) — returns RNode, auto-starts task."""
 
@@ -935,8 +875,8 @@ class TestJsontapWithAsyncSource:
                 yield chunk
 
         root = jsontap(source())
-        assert await root.name == "Alice"
-        assert await root.age == 30
+        assert await root["name"] == "Alice"
+        assert await root["age"] == 30
 
     async def test_stream_array(self):
         async def source():
@@ -946,7 +886,7 @@ class TestJsontapWithAsyncSource:
 
         root = jsontap(source())
         items = []
-        async for item in root.items:
+        async for item in root["items"]:
             items.append(item)
         assert items == [1, 2, 3]
 
@@ -957,14 +897,14 @@ class TestJsontapWithAsyncSource:
 
         root = jsontap(bad_source())
         with pytest.raises(ValueError, match="connection lost"):
-            await root.name
+            await root["name"]
 
     async def test_partial_read(self):
         async def source():
             yield '{"a":1,"b":2,"c":3}'
 
         root = jsontap(source())
-        assert await root.a == 1
+        assert await root["a"] == 1
 
     async def test_slow_source_live_consumption(self):
         async def slow_source():
@@ -981,15 +921,15 @@ class TestJsontapWithAsyncSource:
 
         root = jsontap(slow_source())
 
-        intent = await root.intent
+        intent = await root["intent"]
         assert intent == "refund"
 
         steps = []
-        async for step in root.steps:
+        async for step in root["steps"]:
             steps.append(step)
         assert steps == ["verify", "check", "refund"]
 
-        assert await root.done is True
+        assert await root["done"] is True
 
     async def test_task_stored_on_root(self):
         async def source():
@@ -1005,12 +945,12 @@ class TestJsontapWithSyncSource:
 
     def test_basic_sync_source(self):
         root = jsontap(['{"name":', '"Alice",', '"age":30}'])
-        assert root.name.value == "Alice"
-        assert root.age.value == 30
+        assert root["name"].value == "Alice"
+        assert root["age"].value == 30
 
     def test_sync_iterate(self):
         root = jsontap(['{"items":[1,2,3]}'])
-        assert list(root.items) == [1, 2, 3]
+        assert list(root["items"]) == [1, 2, 3]
 
     def test_sync_generator_source(self):
         def gen():
@@ -1018,11 +958,11 @@ class TestJsontapWithSyncSource:
             yield "42}"
 
         root = jsontap(gen())
-        assert root.x.value == 42
+        assert root["x"].value == 42
 
     def test_sync_bytes(self):
         root = jsontap([b'{"k":', b'"v"}'])
-        assert root.k.value == "v"
+        assert root["k"].value == "v"
 
     def test_sync_bad_json(self):
         with pytest.raises(Exception):
@@ -1030,9 +970,9 @@ class TestJsontapWithSyncSource:
 
     def test_nested_sync(self):
         root = jsontap(['{"user":{"name":"Bob","scores":[10,20]}}'])
-        assert root.user.name.value == "Bob"
-        assert list(root.user.scores) == [10, 20]
-        assert root.user.value == {"name": "Bob", "scores": [10, 20]}
+        assert root["user"]["name"].value == "Bob"
+        assert list(root["user"]["scores"]) == [10, 20]
+        assert root["user"].value == {"name": "Bob", "scores": [10, 20]}
 
 
 class TestJsontapManualFeed:
@@ -1042,7 +982,7 @@ class TestJsontapManualFeed:
         root, feed, finish = jsontap()
         feed('{"name": "Alice"}')
         finish()
-        assert root.name.value == "Alice"
+        assert root["name"].value == "Alice"
 
     def test_incremental_feed(self):
         root, feed, finish = jsontap()
@@ -1050,21 +990,21 @@ class TestJsontapManualFeed:
         feed('me":')
         feed('"Bob"}')
         finish()
-        assert root.name.value == "Bob"
+        assert root["name"].value == "Bob"
 
     def test_feed_and_sync_iterate(self):
         root, feed, finish = jsontap()
         feed('{"nums": [1, 2, 3]}')
         finish()
-        assert list(root.nums) == [1, 2, 3]
+        assert list(root["nums"]) == [1, 2, 3]
 
     async def test_feed_then_await(self):
         root, feed, finish = jsontap()
         feed('{"name": "Eve"}')
         finish()
-        assert await root.name == "Eve"
+        assert await root["name"] == "Eve"
 
-    def test_bracket_access_still_works(self):
+    def test_dotted_key(self):
         root, feed, finish = jsontap()
         feed('{"a.b": 1}')
         finish()
