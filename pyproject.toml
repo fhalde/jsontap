@@ -1,12 +1,20 @@
 [project]
 name = "jsontap"
-version = "0.4.2"
+version = "0.4.3"
 description = "Structured, awaitable access to streaming JSON sources."
 readme = "README.md"
 authors = [
     { name = "fhalde" }
 ]
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "ijson>=3.5.0",
 ]

@@ -1,5 +1,10 @@
 # jsontap
 
+[![PyPI version](https://img.shields.io/pypi/v/jsontap.svg)](https://pypi.org/project/jsontap/)
+[![Python versions](https://img.shields.io/pypi/pyversions/jsontap.svg)](https://pypi.org/project/jsontap/)
+[![License](https://img.shields.io/pypi/l/jsontap.svg)](https://pypi.org/project/jsontap/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/jsontap)](https://pypistats.org/packages/jsontap)
+
 Structured, awaitable access to streaming JSON sources.
 
 Consume fields and array items as they arrive – no need to wait for the full payload. Built on top of streaming parsing from [ijson](https://github.com/ICRAR/ijson), you can `await` values or `async for` over arrays as the JSON arrives incrementally, making it ideal for LLM token streams.
