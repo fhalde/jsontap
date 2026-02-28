@@ -6,7 +6,7 @@ Consume fields and array items as they arrive—no need to wait for the full pay
 
 ## Why Use jsontap?
 
-Traditional JSON parsing (such as json.load) requires the entire payload to be available before parsing begins, which can introduce latency when working with streaming sources like LLM responses. **jsontap** allows you to consume structured JSON while it is still streaming:
+Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses.. **jsontap** allows you to consume structured JSON while it is still streaming:
 
 - Await individual fields as they arrive
 - Async-iterate arrays in real time
