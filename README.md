@@ -1,8 +1,9 @@
 # jsontap
 
-Reactive access to incrementally parsed JSON for Python. Consume fields and array items as they arrive — no need to wait for the full payload.
+A library for structured, awaitable access to streaming JSON sources.
+`jsontap` enables structured streaming from LLMs by exposing streaming JSON as an awaitable object with field-level resolution. Consume fields and array items as they arrive — no need to wait for the full payload.
 
-`jsontap` builds a reactive node tree on top of [ijson](https://github.com/ICRAR/ijson)'s streaming parser. You `await` scalar/object values and `async for` over arrays while the JSON is still being fed in, one chunk at a time. This makes it ideal for LLM token streams, chunked HTTP responses, or any scenario where JSON arrives incrementally.
+`jsontap` builds on top of [ijson](https://github.com/ICRAR/ijson)'s streaming parser. You `await` scalar/object values and `async for` over arrays while the JSON is still being fed in, one chunk at a time. This makes it ideal for LLM token streams or any scenario where JSON arrives incrementally.
 
 ## Install
 

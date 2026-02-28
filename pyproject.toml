@@ -1,7 +1,7 @@
 [project]
 name = "jsontap"
 version = "0.3.0"
-description = "Reactive access to incrementally parsed JSON for Python"
+description = "A library for structured, awaitable access to streaming JSON sources."
 readme = "README.md"
 authors = [
     { name = "fhalde" }
