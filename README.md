@@ -104,6 +104,8 @@ async def run_agent_response():
         print(f"[FINAL] {final_reply}")
 
     await asyncio.gather(run(), ui_logic())
+
+asyncio.run(run_agent_response())
 ```
 
 This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated.
