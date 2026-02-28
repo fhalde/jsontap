@@ -26,7 +26,7 @@ uv add jsontap
 
 ## Quick start
 
-### Practical LLM example: interactive agent UI while JSON is still streaming
+### Practical LLM example
 
 LLM responses can have noticeable latency and can take a while to finish full structured output. With `jsontap`, your app can react as soon as key fields arrive.
 
@@ -74,7 +74,7 @@ async def run_agent_response():
     print(f"[FINAL] {final_reply}")
 ```
 
-This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated.
+This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated whilst giving developers the convenience of writing sequential looking code.
 
 ![jsontap streaming demo](show.gif)
 
