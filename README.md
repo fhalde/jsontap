@@ -4,6 +4,14 @@ Structured, awaitable access to streaming JSON sources.
 
 Consume fields and array items as they arrive—no need to wait for the full payload. Built on top of streaming parsing from [ijson](https://github.com/ICRAR/ijson), you can await values or async for over arrays as JSON is received incrementally, making it ideal for LLM token streams.
 
+## Why Use jsontap?
+
+Traditional JSON parsing (such as json.load) requires the entire payload to be available before parsing begins, which can introduce latency when working with streaming sources like LLM responses. **jsontap** allows you to consume structured JSON while it is still streaming:
+
+- Await individual fields as they arrive
+- Async-iterate arrays in real time
+- Start responding before the full JSON is done
+
 ## Install
 
 ```bash
