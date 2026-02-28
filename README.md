@@ -41,6 +41,75 @@ async def main():
 
 `run()` pulls chunks from the async iterable and feeds them to the parser. `consume()` runs concurrently — values resolve as soon as the relevant bytes have been parsed.
 
+### Practical LLM example: interactive agent UI while JSON is still streaming
+
+In general, LLM responses can have noticeable latency and can take a while to finish full structured output. With `jsontap`, your app can react as soon as key fields arrive.
+
+Suppose your model streams JSON like:
+
+```json
+{
+  "intent": "refund_request",
+  "reply_preview": "I can help with that...",
+  "steps": ["verify_order", "check_policy", "offer_refund"],
+  "final_reply": "..."
+}
+```
+
+You can route and update UI early, then stream plan steps, without waiting for `final_reply`.
+
+```python
+import asyncio
+from jsontap import jsontap
+
+async def llm_json_stream():
+    # Simulated token/chunk stream from an LLM provider.
+    chunks = [
+        '{"intent":"refund_request","reply_preview":"I can help',
+        ' with that...","steps":["verify_order","check_policy",',
+        '"offer_refund"],"final_reply":"I reviewed your order...',
+        ' and approved a refund."}',
+    ]
+    for c in chunks:
+        yield c
+        await asyncio.sleep(0)
+
+async def route_ticket(intent: str):
+    print(f"[ROUTING] -> {intent}")
+
+async def push_preview(text: str):
+    print(f"[PREVIEW] {text}")
+
+async def push_step(step: str):
+    print(f"[STEP] {step}")
+
+async def run_agent_response():
+    root, run = jsontap(llm_json_stream())
+
+    async def ui_logic():
+        # 1) Early interactivity: route as soon as intent is parsed.
+        intent = await root["intent"]
+        await route_ticket(intent)
+
+        # 2) Show partial user-visible text early.
+        preview = await root["reply_preview"]
+        await push_preview(preview)
+
+        # 3) Stream plan/tool steps as they appear.
+        async for step in root["steps"]:
+            await push_step(step)
+
+        # 4) Full completion still available at the end.
+        final_reply = await root["final_reply"]
+        print(f"[FINAL] {final_reply}")
+
+    await asyncio.gather(run(), ui_logic())
+```
+
+This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated.
+
+![jsontap streaming demo](show.gif)
+
 ### With manual feeding
 
 ```python
