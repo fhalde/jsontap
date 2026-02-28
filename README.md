@@ -52,7 +52,7 @@ You can route and update UI early, then stream plan steps, without waiting for `
 import asyncio
 from jsontap import jsontap
 
-async def llm_json_stream():
+async def chat_completion():
     chunks = [
         '{"intent":"refund_request","reply_preview":"I can help',
         ' with that...","steps":["verify_order","check_policy",',
@@ -63,8 +63,8 @@ async def llm_json_stream():
         yield c
         await asyncio.sleep(5)
 
-async def run_agent_response():
-    root = jsontap(llm_json_stream())
+async def agent():
+    root = jsontap(chat_completion())
 
     intent = await root["intent"]
     print(f"[ROUTING] -> {intent}")
@@ -77,6 +77,8 @@ async def run_agent_response():
 
     final_reply = await root["final_reply"]
     print(f"[FINAL] {final_reply}")
+
+asyncio.run(agent())
 ```
 
 This is where `jsontap` shines for LLM products: immediate UX updates from early fields, while the rest of the JSON is still being generated whilst giving developers the convenience of writing sequential looking code.
