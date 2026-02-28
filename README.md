@@ -26,25 +26,6 @@ uv add jsontap
 
 ## Quick start
 
-### Async — stream and consume concurrently
-
-Pass any `AsyncIterable[str | bytes]` — an async generator, `aiohttp`'s `resp.content.iter_any()`, `httpx`'s `response.aiter_bytes()`, OpenAI's streaming API, etc.
-
-```python
-from jsontap import jsontap
-
-async def agent():
-    root = jsontap(llm_token_stream())
-
-    name = await root.user.name
-    print(f"Got name early: {name}")
-
-    async for log in root.logs:
-        print(f"Streaming log: {log}")
-```
-
-`jsontap()` starts a background task that pulls chunks from the source and feeds them to the parser. Values resolve as soon as the relevant bytes have been parsed — no `gather`, no context managers, just `await` what you need.
-
 ### Practical LLM example: interactive agent UI while JSON is still streaming
 
 LLM responses can have noticeable latency and can take a while to finish full structured output. With `jsontap`, your app can react as soon as key fields arrive.
