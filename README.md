@@ -67,18 +67,18 @@ async def chat_completion():
 
 
 async def agent():
-    root = jsontap(chat_completion())
+    response = jsontap(chat_completion())
 
-    intent = await root["intent"]
+    intent = await response["intent"]
     print(f"[ROUTING] -> {intent}")
 
-    preview = await root["reply_preview"]
+    preview = await response["reply_preview"]
     print(f"[PREVIEW] {preview}")
 
-    async for step in root["steps"]:
+    async for step in response["steps"]:
         print(f"[STEP] {step}")
 
-    final_reply = await root["final_reply"]
+    final_reply = await response["final_reply"]
     print(f"[FINAL] {final_reply}")
 
 
