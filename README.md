@@ -183,8 +183,3 @@ finish()
 | `node.value` | Synchronous access to the resolved value |
 | `for item in node` | Synchronous iteration over completed array items |
 | `node.resolved` | `True` if the node's value has been parsed |
-
-## Requirements
-
-- Python >= 3.12
-- [ijson](https://github.com/ICRAR/ijson) >= 3.5
