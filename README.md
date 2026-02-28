@@ -76,7 +76,7 @@ async def agent():
     print(f"[PREVIEW] {preview}")
 
     async for step in response["steps"]:
-        print(f"[STEP] {step}")
+        print(f"[STEP] {await step}")
 
     final_reply = await response["final_reply"]
     print(f"[FINAL] {final_reply}")
@@ -102,20 +102,26 @@ Each node supports these access patterns:
 | Pattern | Use case | Example |
 |---|---|---|
 | `await node` | Get the fully parsed value (scalar, dict, or list) | `name = await root["user"]["name"]` |
-| `async for item in node` | Stream array elements as they arrive | `async for row in root["rows"]: ...` |
+| `async for item in node` | Stream array item handles (`AsyncJsonNode`) as each slot appears | `async for row in root["rows"]: ...` |
+| `async for value in node.values()` | Stream completed array values directly | `async for row in root["rows"].values(): ...` |
 | `node.value` | Synchronous access to a resolved value | `name = root["user"]["name"].value` |
 | `for item in node` | Synchronous iteration over a completed array | `for row in root["rows"]: ...` |
 
 Nodes are created lazily via `node["key"]` and can be subscribed to before the corresponding JSON has been parsed. Multiple consumers can `await` or iterate the same node concurrently — each gets the full result.
 
-### Arrays: stream vs. await
+### Arrays: handles vs. values vs. await
 
 Arrays support both patterns:
 
 ```python
-# Stream items one by one as they're parsed
+# Default async iteration yields item handles.
 async for item in root["logs"]:
-    process(item)
+    if await item["type"] == "error":
+        alert(await item["message"])
+
+# If you want fully materialized values from async iteration:
+async for log in root["logs"].values():
+    process(log)
 
 # Or await the full materialized list
 all_logs = await root["logs"]
@@ -177,7 +183,8 @@ finish()
 |---|---|
 | `node["key"]` | Get or create a child node for the given key |
 | `await node` | Await the resolved value (blocks until parsed) |
-| `async for item in node` | Iterate streamed array items as they arrive |
+| `async for item in node` | Iterate streamed array item handles (`AsyncJsonNode`) |
+| `async for value in node.values()` | Iterate streamed array values as they complete |
 | `node.value` | Synchronous access to the resolved value |
 | `for item in node` | Synchronous iteration over completed array items |
 | `node.resolved` | `True` if the node's value has been parsed |

@@ -54,7 +54,7 @@ class TestReactiveExp:
             user = await root["user"]
             logs = []
             async for item in root["logs"]:
-                logs.append(item)
+                logs.append(await item)
             return user, logs
 
         (user, logs), _ = await _run_live(text, consumer)
@@ -68,9 +68,9 @@ class TestReactiveExp:
             first = []
             second = []
             async for item in root["logs"]:
-                first.append(item)
+                first.append(await item)
             async for item in root["logs"]:
-                second.append(item)
+                second.append(await item)
             return first, second
 
         (first, second), _ = await _run_live(text, consumer)
@@ -91,7 +91,7 @@ class TestReactiveExp:
         async def consume():
             out = []
             async for item in root["logs"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         a, b, _ = await asyncio.gather(consume(), consume(), ingest())
@@ -115,10 +115,37 @@ class TestReactiveExp:
         async def consumer(root):
             out = []
             async for item in root["rows"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         rows, _ = await _run_live(text, consumer)
+        assert rows == [{"id": 1}, {"id": 2}]
+
+    async def test_async_for_yields_item_handles_by_default(self):
+        text = '{"rows":[{"id":1},{"id":2}]}'
+        root, ingest = _setup(text, chunk_size=1)
+
+        async def consume():
+            ids = []
+            async for item in root["rows"]:
+                assert isinstance(item, AsyncJsonNode)
+                ids.append(await item["id"])
+            return ids
+
+        ids, _ = await asyncio.gather(consume(), ingest())
+        assert ids == [1, 2]
+
+    async def test_values_iterates_completed_values(self):
+        text = '{"rows":[{"id":1},{"id":2}]}'
+        root, ingest = _setup(text, chunk_size=1)
+
+        async def consume():
+            out = []
+            async for item in root["rows"].values():
+                out.append(item)
+            return out
+
+        rows, _ = await asyncio.gather(consume(), ingest())
         assert rows == [{"id": 1}, {"id": 2}]
 
     async def test_multidigit_numbers_not_truncated_under_char_streaming(self):
@@ -127,7 +154,7 @@ class TestReactiveExp:
         async def consumer(root):
             out = []
             async for item in root["logs"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         streamed, _ = await _run_live(text, consumer, chunk_size=1)
@@ -139,7 +166,7 @@ class TestReactiveExp:
         async def consumer(root):
             out = []
             async for item in root["vals"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         vals, _ = await _run_live(text, consumer)
@@ -149,7 +176,7 @@ class TestReactiveExp:
         root = await _ingest_text('{"logs":["m","n","o"]}')
         seen = []
         async for item in root["logs"]:
-            seen.append(item)
+            seen.append(await item)
         assert seen == ["m", "n", "o"]
 
     async def test_two_top_level_objects_resolve_independently(self):
@@ -189,7 +216,7 @@ class TestReactiveExp:
 
         out = []
         async for item in root["logs"]:
-            out.append(item)
+            out.append(await item)
         assert out == [1, 2, 3, 4]
 
     async def test_missing_key_fails_after_successful_finish(self):
@@ -246,7 +273,7 @@ class TestExoticCases:
         async def consume():
             out = []
             async for row in root["matrix"]:
-                out.append(row)
+                out.append(await row)
             return out
 
         rows, _ = await asyncio.gather(consume(), ingest())
@@ -259,7 +286,7 @@ class TestExoticCases:
         async def consume():
             out = []
             async for item in root:
-                out.append(item)
+                out.append(await item)
             return out
 
         items, _ = await asyncio.gather(consume(), ingest())
@@ -340,7 +367,7 @@ class TestExoticCases:
         async def consume():
             out = []
             async for item in root["items"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         items, _ = await asyncio.gather(consume(), ingest())
@@ -353,7 +380,7 @@ class TestExoticCases:
         async def consume():
             out = []
             async for group in root["data"]:
-                out.append(group)
+                out.append(await group)
             return out
 
         groups, _ = await asyncio.gather(consume(), ingest())
@@ -366,11 +393,11 @@ class TestExoticCases:
         async def consume():
             a = []
             async for item in root["arr"]:
-                a.append(item)
+                a.append(await item)
             obj = await root["obj"]
             a2 = []
             async for item in root["arr2"]:
-                a2.append(item)
+                a2.append(await item)
             return a, obj, a2
 
         (a, obj, a2), _ = await asyncio.gather(consume(), ingest())
@@ -399,7 +426,7 @@ class TestAdversarial:
             assert user == {"name": "A", "tags": ["x", "y"]}
             tags = []
             async for t in root["user"]["tags"]:
-                tags.append(t)
+                tags.append(await t)
             return tags
 
         tags, _ = await asyncio.gather(consume(), ingest())
@@ -414,7 +441,7 @@ class TestAdversarial:
             first_log = None
             async for item in root["logs"]:
                 if first_log is None:
-                    first_log = item
+                    first_log = await item
                     count = await root["count"]
             return first_log, count
 
@@ -432,7 +459,7 @@ class TestAdversarial:
         async def consume():
             out = []
             async for item in root["nums"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         items, _ = await asyncio.gather(consume(), ingest())
@@ -445,7 +472,7 @@ class TestAdversarial:
         async def consume():
             out = []
             async for layer in root["cube"]:
-                out.append(layer)
+                out.append(await layer)
             return out
 
         cube, _ = await asyncio.gather(consume(), ingest())
@@ -466,7 +493,7 @@ class TestAdversarial:
             v = await root["item"]
             items = []
             async for i in root["items"]:
-                items.append(i)
+                items.append(await i)
             return v, items
 
         (v, items), _ = await asyncio.gather(consume(), ingest())
@@ -483,7 +510,7 @@ class TestAdversarial:
         async def fast_consumer():
             out = []
             async for item in root["logs"]:
-                out.append(item)
+                out.append(await item)
                 if len(out) == 2:
                     barrier.set()
             return out
@@ -492,7 +519,7 @@ class TestAdversarial:
             await barrier.wait()
             out = []
             async for item in root["logs"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         fast, slow, _ = await asyncio.gather(fast_consumer(), slow_consumer(), ingest())
@@ -510,7 +537,7 @@ class TestAdversarial:
         async def streamer():
             out = []
             async for item in root["nums"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         awaited, streamed, _ = await asyncio.gather(awaiter(), streamer(), ingest())
@@ -551,7 +578,7 @@ class TestAdversarial:
         async def consume():
             out = []
             async for row in root["rows"]:
-                out.append(row)
+                out.append(await row)
             return out
 
         rows, _ = await asyncio.gather(consume(), ingest())
@@ -573,7 +600,7 @@ class TestAdversarial:
         # All data is already ingested; consumer starts late
         out = []
         async for item in root["items"]:
-            out.append(item)
+            out.append(await item)
         assert out == list(range(20))
 
     async def test_three_parallel_iterators_plus_awaiter(self):
@@ -583,7 +610,7 @@ class TestAdversarial:
         async def iterate():
             out = []
             async for i in root["arr"]:
-                out.append(i)
+                out.append(await i)
             return out
 
         async def await_it():
@@ -625,7 +652,7 @@ class TestConfidenceGaps:
         async def consume():
             out = []
             async for row in root["rows"]:
-                out.append(row)
+                out.append(await row)
             return out
 
         rows, _ = await asyncio.gather(consume(), ingest())
@@ -642,7 +669,7 @@ class TestConfidenceGaps:
         async def consume():
             out = []
             async for item in root["data"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         data, _ = await asyncio.gather(consume(), ingest())
@@ -658,7 +685,7 @@ class TestConfidenceGaps:
 
         async def slow_consumer():
             async for item in root["nums"]:
-                received.append(item)
+                received.append(await item)
                 if len(received) == 1:
                     barrier.set()
                     await asyncio.sleep(0)
@@ -683,7 +710,7 @@ class TestConfidenceGaps:
 
         out = []
         async for item in root["nums"]:
-            out.append(item)
+            out.append(await item)
         assert out == [1, 2, 3, 4, 5, 6, 7, 8]
 
     async def test_sync_bulk_feed_keeps_full_history(self):
@@ -694,7 +721,7 @@ class TestConfidenceGaps:
         async def consumer():
             out = []
             async for item in root["nums"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         async def producer():
@@ -712,7 +739,7 @@ class TestConfidenceGaps:
         async def consumer():
             out = []
             async for item in root["nums"]:
-                out.append(item)
+                out.append(await item)
             return out
 
         async def producer():
@@ -887,7 +914,7 @@ class TestJsontapWithAsyncSource:
         root = jsontap(source())
         items = []
         async for item in root["items"]:
-            items.append(item)
+            items.append(await item)
         assert items == [1, 2, 3]
 
     async def test_source_error_propagates(self):
@@ -926,7 +953,7 @@ class TestJsontapWithAsyncSource:
 
         steps = []
         async for step in root["steps"]:
-            steps.append(step)
+            steps.append(await step)
         assert steps == ["verify", "check", "refund"]
 
         assert await root["done"] is True
