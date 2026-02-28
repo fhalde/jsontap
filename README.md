@@ -51,17 +51,21 @@ You can route and update UI early, then stream plan steps, without waiting for `
 ```python
 import asyncio
 from jsontap import jsontap
+import json
+
 
 async def chat_completion():
-    chunks = [
-        '{"intent":"refund_request","reply_preview":"I can help',
-        ' with that...","steps":["verify_order","check_policy",',
-        '"offer_refund"],"final_reply":"I reviewed your order...',
-        ' and approved a refund."}',
-    ]
-    for c in chunks:
+    payload = {
+        "intent": "refund_request",
+        "reply_preview": "I can help with that...",
+        "steps": ["verify_order", "check_policy", "offer_refund"],
+        "final_reply": "I reviewed your order... and approved a refund.",
+    }
+    j = json.dumps(payload)
+    for c in j:
         yield c
-        await asyncio.sleep(5)
+        await asyncio.sleep(0.1)
+
 
 async def agent():
     root = jsontap(chat_completion())
@@ -77,6 +81,7 @@ async def agent():
 
     final_reply = await root["final_reply"]
     print(f"[FINAL] {final_reply}")
+
 
 asyncio.run(agent())
 ```
