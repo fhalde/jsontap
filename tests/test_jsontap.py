@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import asyncio
 
-from jsontap.main import RNode, JSONFeed, jsontap
+from jsontap.main import AsyncJsonNode, AsyncJsonFeed, jsontap
 
 pytest = __import__("pytest")
 
 
 async def _ingest_text(
     text: str, *, chunk_size: int = 1, per_chunk_yield: bool = True
-) -> RNode:
-    root = RNode()
-    ingestor = JSONFeed(root)
+) -> AsyncJsonNode:
+    root = AsyncJsonNode()
+    ingestor = AsyncJsonFeed(root)
     for i in range(0, len(text), chunk_size):
         ingestor.feed(text[i : i + chunk_size])
         if per_chunk_yield:
@@ -21,8 +21,8 @@ async def _ingest_text(
 
 
 def _setup(text: str, *, chunk_size: int = 1):
-    root = RNode()
-    ingestor = JSONFeed(root)
+    root = AsyncJsonNode()
+    ingestor = AsyncJsonFeed(root)
 
     async def ingest():
         for i in range(0, len(text), chunk_size):
@@ -34,8 +34,8 @@ def _setup(text: str, *, chunk_size: int = 1):
 
 
 async def _run_live(text: str, consumer, *, chunk_size: int = 1):
-    root = RNode()
-    ingestor = JSONFeed(root)
+    root = AsyncJsonNode()
+    ingestor = AsyncJsonFeed(root)
 
     async def ingest():
         for i in range(0, len(text), chunk_size):
@@ -79,8 +79,8 @@ class TestReactiveExp:
 
     async def test_parallel_consumers_both_see_all_items(self):
         text = '{"logs":["x","y","z"]}'
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
 
         async def ingest():
             for ch in text:
@@ -167,8 +167,8 @@ class TestReactiveExp:
         assert await root["nested"] == {"x.y": 2}
 
     async def test_finish_on_incomplete_json_propagates_error(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"logs": [1, 2')
         try:
             ingestor.finish()
@@ -181,8 +181,8 @@ class TestReactiveExp:
             await root["logs"]
 
     async def test_late_subscriber_keeps_full_replay(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         for chunk in ('{"logs":[1,2,3,4]}',):
             ingestor.feed(chunk)
         ingestor.finish()
@@ -193,8 +193,8 @@ class TestReactiveExp:
         assert out == [1, 2, 3, 4]
 
     async def test_missing_key_fails_after_successful_finish(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"user":{"name":"Alice"},"logs":["a"]}')
         ingestor.finish()
 
@@ -202,15 +202,15 @@ class TestReactiveExp:
             await root["use"]
 
     async def test_existing_key_still_resolves_after_finish(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"user":{"name":"Alice"}}')
         ingestor.finish()
         assert await root["user"] == {"name": "Alice"}
 
     async def test_new_key_after_close_with_error_fails_immediately(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"logs": [1, 2')
         try:
             ingestor.finish()
@@ -566,8 +566,8 @@ class TestAdversarial:
 
         data = {"items": list(range(20))}
         text = json.dumps(data)
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed(text)
         ingestor.finish()
         # All data is already ingested; consumer starts late
@@ -599,8 +599,8 @@ class TestAdversarial:
         assert r4 == expected
 
     async def test_byte_chunks_instead_of_str(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         for chunk in [b'{"na', b'me":', b' "Bo', b'b"}']:
             ingestor.feed(chunk)
         ingestor.finish()
@@ -650,8 +650,8 @@ class TestConfidenceGaps:
 
     async def test_live_slow_consumer_still_sees_all_items(self):
         """Slow consumer receives all items with unbounded replay."""
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
 
         received = []
         barrier = asyncio.Event()
@@ -676,8 +676,8 @@ class TestConfidenceGaps:
 
     async def test_late_subscriber_gets_full_history(self):
         """Late subscriber after ingestion still sees the full history."""
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"nums":[1,2,3,4,5,6,7,8]}')
         ingestor.finish()
 
@@ -688,8 +688,8 @@ class TestConfidenceGaps:
 
     async def test_sync_bulk_feed_keeps_full_history(self):
         """Sync bulk feed still preserves full history for iteration."""
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
 
         async def consumer():
             out = []
@@ -706,8 +706,8 @@ class TestConfidenceGaps:
 
     async def test_async_drip_feed_keeps_all(self):
         """With async yields between items, consumer receives all items."""
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
 
         async def consumer():
             out = []
@@ -748,51 +748,51 @@ class TestSyncValue:
     """Tests for RNode.value — synchronous access after parsing is complete."""
 
     def test_scalar_value(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('"hello"')
         ingestor.finish()
         assert root.value == "hello"
 
     def test_object_value(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"name": "Alice", "age": 30}')
         ingestor.finish()
         assert root["name"].value == "Alice"
         assert root["age"].value == 30
 
     def test_nested_object_value(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"user": {"name": "Bob", "tags": ["a", "b"]}}')
         ingestor.finish()
         assert root["user"].value == {"name": "Bob", "tags": ["a", "b"]}
         assert root["user"]["name"].value == "Bob"
 
     def test_array_value(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"scores": [10, 20, 30]}')
         ingestor.finish()
         assert root["scores"].value == [10, 20, 30]
 
     def test_value_raises_before_resolve(self):
-        root = RNode()
+        root = AsyncJsonNode()
         with pytest.raises(LookupError, match="not yet resolved"):
             root["name"].value
 
     def test_value_raises_on_missing_key(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"name": "Alice"}')
         ingestor.finish()
         with pytest.raises(KeyError, match="Missing key"):
             root["nonexistent"].value
 
     def test_value_raises_on_parse_error(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"name": ')
         try:
             ingestor.finish()
@@ -802,15 +802,15 @@ class TestSyncValue:
             root["name"].value
 
     def test_null_value(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"x": null}')
         ingestor.finish()
         assert root["x"].value is None
 
     def test_resolved_property(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         assert not root["name"].resolved
         ingestor.feed('{"name": "Alice"}')
         ingestor.finish()
@@ -821,43 +821,43 @@ class TestSyncIteration:
     """Tests for RNode.__iter__ — synchronous iteration after parsing."""
 
     def test_iterate_array(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"items": [1, 2, 3]}')
         ingestor.finish()
         assert list(root["items"]) == [1, 2, 3]
 
     def test_iterate_array_of_objects(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"rows": [{"id": 1}, {"id": 2}]}')
         ingestor.finish()
         assert list(root["rows"]) == [{"id": 1}, {"id": 2}]
 
     def test_iterate_empty_array(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"items": []}')
         ingestor.finish()
         assert list(root["items"]) == []
 
     def test_iterate_before_finish_raises(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"items": [1, 2')
         with pytest.raises(RuntimeError, match="Stream not complete"):
             list(root["items"])
 
     def test_iterate_top_level_array(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
-        ingestor.feed('[10, 20, 30]')
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
+        ingestor.feed("[10, 20, 30]")
         ingestor.finish()
         assert list(root) == [10, 20, 30]
 
     def test_for_loop(self):
-        root = RNode()
-        ingestor = JSONFeed(root)
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
         ingestor.feed('{"tags": ["a", "b", "c"]}')
         ingestor.finish()
         out = []
@@ -880,7 +880,7 @@ class TestJsontapWithAsyncSource:
 
     async def test_stream_array(self):
         async def source():
-            for chunk in ['{"items":[', '1,2,', '3]}']:
+            for chunk in ['{"items":[', "1,2,", "3]}"]:
                 yield chunk
                 await asyncio.sleep(0)
 

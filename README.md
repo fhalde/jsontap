@@ -80,7 +80,7 @@ This is where `jsontap` shines for LLM products: immediate UX updates from early
 
 ## How it works
 
-`jsontap()` returns a reactive root node (`RNode`). Depending on the source:
+`jsontap()` returns a reactive root node (`AsyncJsonNode`). Depending on the source:
 
 - **Async iterable** — a background task starts immediately, parsing chunks as they arrive
 - **Sync iterable** — all chunks are consumed eagerly, values are resolved before you access them
@@ -138,14 +138,14 @@ Child nodes are created on first access, so you can subscribe before the parent 
 
 Creates a reactive JSON root.
 
-**With an async source** — starts background parsing, returns `RNode`:
+**With an async source** — starts background parsing, returns `AsyncJsonNode`:
 
 ```python
 root = jsontap(async_source)
 name = await root["user"]["name"]
 ```
 
-**With a sync source** — parses eagerly, returns `RNode`:
+**With a sync source** — parses eagerly, returns `AsyncJsonNode`:
 
 ```python
 root = jsontap(sync_source)
@@ -160,7 +160,7 @@ feed(chunk)
 finish()
 ```
 
-### `RNode`
+### `AsyncJsonNode`
 
 | Method / Protocol | Description |
 |---|---|

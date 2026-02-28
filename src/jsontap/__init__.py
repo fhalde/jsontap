@@ -1,3 +1,3 @@
-from .main import RNode, jsontap
+from .main import AsyncJsonNode, jsontap
 
-__all__ = ["jsontap", "RNode"]
+__all__ = ["jsontap", "AsyncJsonNode"]
