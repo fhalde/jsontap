@@ -16,10 +16,12 @@ class _PathState:
     future: asyncio.Future | None = None
     stream_items: list = field(default_factory=list)
     stream_items_by_index: dict[int, object] = field(default_factory=dict)
+    progressive_items_by_index: dict[int, tuple[str, ...]] = field(default_factory=dict)
     stream_length: int | None = None
     stream_done: bool = False
     stream_error: Exception | None = None
     stream_waiters: list[asyncio.Future] = field(default_factory=list)
+    progressive_waiters: list[asyncio.Future] = field(default_factory=list)
     sealed: bool = False
 
 
@@ -67,6 +69,7 @@ class _PathStore:
         state.stream_error = exc
         state.stream_done = True
         self._wake_stream_waiters(state)
+        self._wake_progressive_waiters(state)
 
     def push_stream(self, path: tuple[str, ...], value) -> None:
         state = self.get(path)
@@ -85,8 +88,12 @@ class _PathStore:
             for idx, item in enumerate(final_value):
                 state.stream_items_by_index[idx] = item
             state.stream_items = list(final_value)
+        if not state.progressive_items_by_index:
+            for idx in range(state.stream_length):
+                state.progressive_items_by_index[idx] = (*path, str(idx))
         self.resolve(path, final_value)
         self._wake_stream_waiters(state)
+        self._wake_progressive_waiters(state)
 
     def push_stream_indexed(self, path: tuple[str, ...], index: int, value) -> None:
         """Insert stream item by index while preserving consumer order."""
@@ -94,6 +101,14 @@ class _PathStore:
         state.stream_items_by_index[index] = value
         state.stream_items.append(value)
         self._wake_stream_waiters(state)
+
+    def push_progressive_indexed(
+        self, path: tuple[str, ...], index: int, item_path: tuple[str, ...]
+    ) -> None:
+        """Insert progressive item path by index for early item-node iteration."""
+        state = self.get(path)
+        state.progressive_items_by_index[index] = item_path
+        self._wake_progressive_waiters(state)
 
     def close_missing(self) -> None:
         self._closed = True
@@ -106,6 +121,7 @@ class _PathStore:
             if not state.stream_done:
                 state.stream_done = True
                 self._wake_stream_waiters(state)
+                self._wake_progressive_waiters(state)
             state.sealed = True
 
     def close_error(self, exc: Exception) -> None:
@@ -119,6 +135,7 @@ class _PathStore:
             state.stream_done = True
             state.sealed = True
             self._wake_stream_waiters(state)
+            self._wake_progressive_waiters(state)
 
     @staticmethod
     def _path_str(path: tuple[str, ...]) -> str:
@@ -130,6 +147,13 @@ class _PathStore:
             if not waiter.done():
                 waiter.set_result(None)
         state.stream_waiters.clear()
+
+    @staticmethod
+    def _wake_progressive_waiters(state: _PathState) -> None:
+        for waiter in state.progressive_waiters:
+            if not waiter.done():
+                waiter.set_result(None)
+        state.progressive_waiters.clear()
 
 
 class AsyncJsonNode:
@@ -167,6 +191,10 @@ class AsyncJsonNode:
 
     def __aiter__(self):
         return _AsyncPathCursor(self._store, self._path)
+
+    def lazy(self):
+        """Iterate array item nodes as soon as their index slots are known."""
+        return _AsyncPathNodeCursor(self._store, self._path)
 
     def __iter__(self):
         state = self._store.get(self._path)
@@ -214,6 +242,40 @@ class _AsyncPathCursor:
             await waiter
 
 
+class _AsyncPathNodeCursor:
+    def __init__(self, store: _PathStore, path: tuple[str, ...]) -> None:
+        self._store = store
+        self._path = path
+        self._index = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        while True:
+            state = self._store.get(self._path)
+            if self._index in state.progressive_items_by_index:
+                item_path = state.progressive_items_by_index[self._index]
+                self._index += 1
+                return AsyncJsonNode(self._store, item_path)
+
+            if state.stream_error is not None:
+                raise state.stream_error
+            if state.stream_done:
+                if (
+                    state.stream_length is not None
+                    and self._index < state.stream_length
+                ):
+                    raise RuntimeError(
+                        f"Missing progressive item at index {self._index} for completed stream."
+                    )
+                raise StopAsyncIteration
+
+            waiter = asyncio.get_running_loop().create_future()
+            state.progressive_waiters.append(waiter)
+            await waiter
+
+
 class AsyncJsonFeed:
     """Incremental parser that writes updates into a path-indexed store."""
 
@@ -250,6 +312,7 @@ class AsyncJsonFeed:
         else:
             path, parent_index = self._next_array_item_slot(parent)
             parent["value"].append(value)
+            self._store.push_progressive_indexed(parent["path"], parent_index, path)
 
         self._stack.append(
             {
@@ -280,6 +343,7 @@ class AsyncJsonFeed:
 
         parent["value"].append(value)
         item_path, item_index = self._next_array_item_slot(parent)
+        self._store.push_progressive_indexed(parent["path"], item_index, item_path)
         self._store.resolve(item_path, value)
         self._store.push_stream_indexed(parent["path"], item_index, value)
 

@@ -121,6 +121,111 @@ class TestReactiveExp:
         rows, _ = await _run_live(text, consumer)
         assert rows == [{"id": 1}, {"id": 2}]
 
+    async def test_progressive_items_yields_item_node_before_object_completion(self):
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
+
+        async def first_item():
+            async for item in root["rows"].lazy():
+                return item
+            raise AssertionError("Expected at least one progressive item.")
+
+        waiter = asyncio.create_task(first_item())
+        ingestor.feed('{"rows":[{"id":1')
+        await asyncio.sleep(0)
+
+        item = await asyncio.wait_for(waiter, timeout=1)
+        assert isinstance(item, AsyncJsonNode)
+        assert item.resolved is False
+
+        ingestor.feed(',"name":"Alice"}]}')
+        ingestor.finish()
+        assert await item == {"id": 1, "name": "Alice"}
+
+    async def test_progressive_items_supports_early_field_access(self):
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
+
+        async def first_item():
+            async for item in root["rows"].lazy():
+                return item
+            raise AssertionError("Expected at least one progressive item.")
+
+        waiter = asyncio.create_task(first_item())
+        ingestor.feed('{"rows":[{"id":')
+        await asyncio.sleep(0)
+        # Number token is committed once a delimiter arrives in the stream.
+        ingestor.feed("1,")
+        await asyncio.sleep(0)
+
+        item = await asyncio.wait_for(waiter, timeout=1)
+        assert await item["id"] == 1
+        assert item.resolved is False
+
+        ingestor.feed('"name":"Alice"}]}')
+        ingestor.finish()
+        assert await item == {"id": 1, "name": "Alice"}
+
+    async def test_progressive_items_replay_for_late_subscriber(self):
+        root = await _ingest_text('{"rows":[{"id":1},{"id":2}]}')
+        out = []
+        async for item in root["rows"].lazy():
+            out.append(await item)
+        assert out == [{"id": 1}, {"id": 2}]
+
+    async def test_progressive_and_regular_iterators_can_run_together(self):
+        text = '{"rows":[{"id":1},{"id":2},{"id":3}]}'
+        root, ingest = _setup(text, chunk_size=1)
+
+        async def consume_regular():
+            out = []
+            async for item in root["rows"]:
+                out.append(item)
+            return out
+
+        async def consume_progressive():
+            out = []
+            async for item in root["rows"].lazy():
+                out.append(await item["id"])
+            return out
+
+        regular, progressive, _ = await asyncio.gather(
+            consume_regular(), consume_progressive(), ingest()
+        )
+        assert regular == [{"id": 1}, {"id": 2}, {"id": 3}]
+        assert progressive == [1, 2, 3]
+
+    async def test_progressive_items_receive_stream_error(self):
+        root = AsyncJsonNode()
+        ingestor = AsyncJsonFeed(root)
+
+        async def consume():
+            out = []
+            async for item in root["rows"].lazy():
+                out.append(await item)
+            return out
+
+        task = asyncio.create_task(consume())
+        ingestor.feed('{"rows":[{"id":1},')
+        await asyncio.sleep(0)
+        with pytest.raises(Exception):
+            ingestor.finish()
+        with pytest.raises(Exception):
+            await task
+
+    async def test_progressive_items_mixed_nested_structures_char_stream(self):
+        text = '{"rows":[{"meta":{"ok":true},"vals":[1,2]}, {"meta":{"ok":false},"vals":[3]}]}'
+        root, ingest = _setup(text, chunk_size=1)
+
+        async def consume():
+            out = []
+            async for item in root["rows"].lazy():
+                out.append((await item["meta"]["ok"], await item["vals"]))
+            return out
+
+        rows, _ = await asyncio.gather(consume(), ingest())
+        assert rows == [(True, [1, 2]), (False, [3])]
+
     async def test_multidigit_numbers_not_truncated_under_char_streaming(self):
         text = '{"logs":[10,20,30]}'
 

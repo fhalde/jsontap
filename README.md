@@ -103,6 +103,7 @@ Each node supports these access patterns:
 |---|---|---|
 | `await node` | Get the fully parsed value (scalar, dict, or list) | `name = await root["user"]["name"]` |
 | `async for item in node` | Stream array elements as they arrive | `async for row in root["rows"]: ...` |
+| `async for item_node in node.lazy()` | Stream array item nodes before object/array items are fully complete | `async for row in root["rows"].lazy(): ...` |
 | `node.value` | Synchronous access to a resolved value | `name = root["user"]["name"].value` |
 | `for item in node` | Synchronous iteration over a completed array | `for row in root["rows"]: ...` |
 
@@ -120,6 +121,22 @@ async for item in root["logs"]:
 # Or await the full materialized list
 all_logs = await root["logs"]
 ```
+
+### Progressive nested items
+
+For arrays of objects, regular iteration yields fully completed objects. If you want to start work as soon as each array slot is known, use `progressive_items()`:
+
+```python
+async for row in root["rows"].lazy():
+    # row is an AsyncJsonNode for rows[i], potentially unresolved at first.
+    row_id = await row["id"]        # can resolve before row is complete
+    full_row = await row            # waits until the full object closes
+    handle(row_id, full_row)
+```
+
+Choose by goal:
+- `async for item in root["rows"]` — easiest: completed values only.
+- `async for item_node in root["rows"].lazy()` — lower latency for nested field-level logic.
 
 ### Nested access
 
@@ -178,6 +195,7 @@ finish()
 | `node["key"]` | Get or create a child node for the given key |
 | `await node` | Await the resolved value (blocks until parsed) |
 | `async for item in node` | Iterate streamed array items as they arrive |
+| `async for item_node in node.lazy()` | Iterate array item nodes by index as soon as each slot is claimed |
 | `node.value` | Synchronous access to the resolved value |
 | `for item in node` | Synchronous iteration over completed array items |
 | `node.resolved` | `True` if the node's value has been parsed |
