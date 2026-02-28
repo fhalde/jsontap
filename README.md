@@ -72,7 +72,7 @@ async def llm_json_stream():
     ]
     for c in chunks:
         yield c
-        await asyncio.sleep(0)
+        await asyncio.sleep(5)
 
 async def route_ticket(intent: str):
     print(f"[ROUTING] -> {intent}")
