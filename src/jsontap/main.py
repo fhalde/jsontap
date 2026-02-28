@@ -5,6 +5,11 @@ _VALUE_EVENTS = frozenset({"string", "number", "boolean", "null"})
 _UNSET = object()
 
 
+def _suppress_task_exception(task):
+    if not task.cancelled():
+        task.exception()
+
+
 class RNode:
     def __init__(self, *, path=()):
         self.children = {}
@@ -40,6 +45,11 @@ class RNode:
                 child.sealed = True
             self.children[key] = child
         return self.children[key]
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self[name]
 
     @property
     def value(self):
@@ -306,93 +316,58 @@ class JSONFeed:
         self._consume_scalar(value)
 
 
-class JsonTap:
-    """Reactive JSON parser with context manager support."""
-
-    def __init__(self, source=None):
-        self.root = RNode()
-        self._ingestor = JSONFeed(self.root)
-        self._source = source
-        self._task = None
-
-    def feed(self, chunk):
-        self._ingestor.feed(chunk)
-
-    def finish(self):
-        self._ingestor.finish()
-
-    def __getitem__(self, key):
-        return self.root[key]
-
-    # --- async context manager ---
-
-    async def __aenter__(self):
-        if self._source is not None:
-            self._task = asyncio.create_task(self._run_async())
-        return self.root
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except (asyncio.CancelledError, Exception):
-                pass
-        return False
-
-    async def _run_async(self):
-        try:
-            async for chunk in self._source:
-                self._ingestor.feed(chunk)
-            self._ingestor.finish()
-        except Exception as exc:
-            self._ingestor.close_with_error(exc)
-            raise
-
-    # --- sync context manager ---
-
-    def __enter__(self):
-        if self._source is not None:
-            if hasattr(self._source, "__aiter__"):
-                raise TypeError(
-                    "Cannot use 'with' for async sources. "
-                    "Use 'async with' instead."
-                )
-            try:
-                for chunk in self._source:
-                    self._ingestor.feed(chunk)
-                self._ingestor.finish()
-            except Exception as exc:
-                self._ingestor.close_with_error(exc)
-                raise
-        return self.root
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        return False
-
-
 def jsontap(source=None):
-    """Create a reactive JSON tap.
+    """Create a reactive JSON root.
 
-    Async with source (streams concurrently):
+    With an async source — starts a background task, returns the root node:
 
-        async with jsontap(async_stream) as root:
-            name = await root["name"]
-            async for item in root["items"]:
-                process(item)
+        root = jsontap(llm_stream())
+        name = await root.user.name
+        async for item in root.items:
+            process(item)
 
-    Sync with source (parses eagerly, then access):
+    With a sync source — parses eagerly, returns the root node:
 
-        with jsontap(chunks) as root:
-            name = root["name"].value
-            for item in root["items"]:
-                process(item)
+        root = jsontap(chunks)
+        name = root.user.name.value
+        for item in root.items:
+            process(item)
 
-    Manual feed (no source):
+    Without a source — returns (root, feed, finish) for manual feeding:
 
-        tap = jsontap()
-        tap.feed('{"name": "Alice"}')
-        tap.finish()
-        name = tap["name"].value
+        root, feed, finish = jsontap()
+        feed('{"name": "Alice"}')
+        finish()
+        name = root.name.value
     """
-    return JsonTap(source)
+    root = RNode()
+    ingestor = JSONFeed(root)
+
+    if source is None:
+        return root, ingestor.feed, ingestor.finish
+
+    if hasattr(source, "__aiter__"):
+
+        async def _drive():
+            try:
+                async for chunk in source:
+                    ingestor.feed(chunk)
+                ingestor.finish()
+            except Exception as exc:
+                ingestor.close_with_error(exc)
+                raise
+
+        task = asyncio.create_task(_drive())
+        task.add_done_callback(_suppress_task_exception)
+        root._task = task
+        return root
+
+    try:
+        for chunk in source:
+            ingestor.feed(chunk)
+        ingestor.finish()
+    except Exception as exc:
+        ingestor.close_with_error(exc)
+        raise
+
+    return root

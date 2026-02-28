@@ -1,3 +1,3 @@
-from .main import JsonTap, RNode, jsontap
+from .main import RNode, jsontap
 
-__all__ = ["jsontap", "JsonTap", "RNode"]
+__all__ = ["jsontap", "RNode"]
