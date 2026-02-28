@@ -2,18 +2,34 @@ import asyncio
 import ijson
 
 _VALUE_EVENTS = frozenset({"string", "number", "boolean", "null"})
+_UNSET = object()
 
 
 class RNode:
     def __init__(self, *, path=()):
         self.children = {}
-        self.future = asyncio.Future()
         self.path = path
         self.sealed = False
         self.stream_items = []
         self.stream_done = False
         self.stream_error = None
+        self._future = None
+        self._value = _UNSET
+        self._exception = None
         self._stream_waiters = []
+
+    @property
+    def resolved(self):
+        return self._value is not _UNSET or self._exception is not None
+
+    def _ensure_future(self):
+        if self._future is None:
+            self._future = asyncio.Future()
+            if self._value is not _UNSET:
+                self._future.set_result(self._value)
+            elif self._exception is not None:
+                self._future.set_exception(self._exception)
+        return self._future
 
     def __getitem__(self, key):
         if key not in self.children:
@@ -25,9 +41,27 @@ class RNode:
             self.children[key] = child
         return self.children[key]
 
+    @property
+    def value(self):
+        """Synchronous access to the resolved value.
+
+        Raises LookupError if the value hasn't been parsed yet.
+        """
+        if self._value is not _UNSET:
+            return self._value
+        if self._exception is not None:
+            raise self._exception
+        raise LookupError(
+            "Value not yet resolved. "
+            "Use 'await node' in async code, or ensure parsing is complete."
+        )
+
     def resolve(self, value):
-        if not self.future.done():
-            self.future.set_result(value)
+        if self.resolved:
+            return
+        self._value = value
+        if self._future is not None and not self._future.done():
+            self._future.set_result(value)
 
     def push_stream(self, value):
         self.stream_items.append(value)
@@ -35,15 +69,16 @@ class RNode:
 
     def end_stream(self, final_value=None):
         self.stream_done = True
-        # Also make arrays await-able as a fully materialized list.
         self.resolve(list(self.stream_items) if final_value is None else final_value)
         self._wake_stream_waiters()
 
     def fail(self, exc):
         self.stream_error = exc
         self.stream_done = True
-        if not self.future.done():
-            self.future.set_exception(exc)
+        if not self.resolved:
+            self._exception = exc
+            if self._future is not None and not self._future.done():
+                self._future.set_exception(exc)
         self._wake_stream_waiters()
 
     def _wake_stream_waiters(self):
@@ -53,10 +88,21 @@ class RNode:
         self._stream_waiters.clear()
 
     def __await__(self):
-        return self.future.__await__()
+        return self._ensure_future().__await__()
 
     def __aiter__(self):
         return _StreamCursor(self)
+
+    def __iter__(self):
+        """Synchronous iteration over completed stream items."""
+        if not self.stream_done:
+            raise RuntimeError(
+                "Stream not complete. "
+                "Use 'async for' in async code, or ensure parsing is complete."
+            )
+        if self.stream_error is not None:
+            raise self.stream_error
+        return iter(self.stream_items)
 
 
 class _StreamCursor:
@@ -107,7 +153,7 @@ class JSONFeed:
             self._seal_tree(child)
 
     def _fail_unresolved_nodes(self, node):
-        if not node.future.done():
+        if not node.resolved:
             key_path = ".".join(node.path) if node.path else "<root>"
             node.fail(KeyError(f"Missing key in parsed JSON: {key_path}"))
         for child in node.children.values():
@@ -260,39 +306,93 @@ class JSONFeed:
         self._consume_scalar(value)
 
 
-def jsontap(source=None):
-    """Create a reactive JSON root and its feeder.
+class JsonTap:
+    """Reactive JSON parser with context manager support."""
 
-    Usage with an async iterable (LLM token stream, etc.):
+    def __init__(self, source=None):
+        self.root = RNode()
+        self._ingestor = JSONFeed(self.root)
+        self._source = source
+        self._task = None
 
-        root, run = jsontap(llm_stream())
-        async def consume():
-            name = await root["user"]["name"]
-            ...
-        await asyncio.gather(run(), consume())
+    def feed(self, chunk):
+        self._ingestor.feed(chunk)
 
-    Usage with manual feeding:
+    def finish(self):
+        self._ingestor.finish()
 
-        root, feed, finish = jsontap()
-        feed('{"name":')
-        feed('"Alice"}')
-        finish()
-        name = await root["name"]
-    """
-    root = RNode()
-    ingestor = JSONFeed(root)
+    def __getitem__(self, key):
+        return self.root[key]
 
-    if source is not None:
+    # --- async context manager ---
 
-        async def run():
+    async def __aenter__(self):
+        if self._source is not None:
+            self._task = asyncio.create_task(self._run_async())
+        return self.root
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._task is not None:
+            self._task.cancel()
             try:
-                async for chunk in source:
-                    ingestor.feed(chunk)
-                ingestor.finish()
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+        return False
+
+    async def _run_async(self):
+        try:
+            async for chunk in self._source:
+                self._ingestor.feed(chunk)
+            self._ingestor.finish()
+        except Exception as exc:
+            self._ingestor.close_with_error(exc)
+            raise
+
+    # --- sync context manager ---
+
+    def __enter__(self):
+        if self._source is not None:
+            if hasattr(self._source, "__aiter__"):
+                raise TypeError(
+                    "Cannot use 'with' for async sources. "
+                    "Use 'async with' instead."
+                )
+            try:
+                for chunk in self._source:
+                    self._ingestor.feed(chunk)
+                self._ingestor.finish()
             except Exception as exc:
-                ingestor.close_with_error(exc)
+                self._ingestor.close_with_error(exc)
                 raise
+        return self.root
 
-        return root, run
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
 
-    return root, ingestor.feed, ingestor.finish
+
+def jsontap(source=None):
+    """Create a reactive JSON tap.
+
+    Async with source (streams concurrently):
+
+        async with jsontap(async_stream) as root:
+            name = await root["name"]
+            async for item in root["items"]:
+                process(item)
+
+    Sync with source (parses eagerly, then access):
+
+        with jsontap(chunks) as root:
+            name = root["name"].value
+            for item in root["items"]:
+                process(item)
+
+    Manual feed (no source):
+
+        tap = jsontap()
+        tap.feed('{"name": "Alice"}')
+        tap.finish()
+        name = tap["name"].value
+    """
+    return JsonTap(source)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from jsontap.main import RNode, JSONFeed
+from jsontap.main import RNode, JSONFeed, JsonTap, jsontap
 
 pytest = __import__("pytest")
 
@@ -742,3 +742,289 @@ class TestConfidenceGaps:
         assert awaited == {"name": "Alice", "age": 30}
         # Object nodes don't push stream items, so iterator gets nothing
         assert iterated == []
+
+
+class TestSyncValue:
+    """Tests for RNode.value — synchronous access after parsing is complete."""
+
+    def test_scalar_value(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('"hello"')
+        ingestor.finish()
+        assert root.value == "hello"
+
+    def test_object_value(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"name": "Alice", "age": 30}')
+        ingestor.finish()
+        assert root["name"].value == "Alice"
+        assert root["age"].value == 30
+
+    def test_nested_object_value(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"user": {"name": "Bob", "tags": ["a", "b"]}}')
+        ingestor.finish()
+        assert root["user"].value == {"name": "Bob", "tags": ["a", "b"]}
+        assert root["user"]["name"].value == "Bob"
+
+    def test_array_value(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"scores": [10, 20, 30]}')
+        ingestor.finish()
+        assert root["scores"].value == [10, 20, 30]
+
+    def test_value_raises_before_resolve(self):
+        root = RNode()
+        with pytest.raises(LookupError, match="not yet resolved"):
+            root["name"].value
+
+    def test_value_raises_on_missing_key(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"name": "Alice"}')
+        ingestor.finish()
+        with pytest.raises(KeyError, match="Missing key"):
+            root["nonexistent"].value
+
+    def test_value_raises_on_parse_error(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"name": ')
+        try:
+            ingestor.finish()
+        except Exception:
+            pass
+        with pytest.raises(Exception):
+            root["name"].value
+
+    def test_null_value(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"x": null}')
+        ingestor.finish()
+        assert root["x"].value is None
+
+    def test_resolved_property(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        assert not root["name"].resolved
+        ingestor.feed('{"name": "Alice"}')
+        ingestor.finish()
+        assert root["name"].resolved
+
+
+class TestSyncIteration:
+    """Tests for RNode.__iter__ — synchronous iteration after parsing."""
+
+    def test_iterate_array(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"items": [1, 2, 3]}')
+        ingestor.finish()
+        assert list(root["items"]) == [1, 2, 3]
+
+    def test_iterate_array_of_objects(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"rows": [{"id": 1}, {"id": 2}]}')
+        ingestor.finish()
+        assert list(root["rows"]) == [{"id": 1}, {"id": 2}]
+
+    def test_iterate_empty_array(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"items": []}')
+        ingestor.finish()
+        assert list(root["items"]) == []
+
+    def test_iterate_before_finish_raises(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"items": [1, 2')
+        with pytest.raises(RuntimeError, match="Stream not complete"):
+            list(root["items"])
+
+    def test_iterate_top_level_array(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('[10, 20, 30]')
+        ingestor.finish()
+        assert list(root) == [10, 20, 30]
+
+    def test_for_loop(self):
+        root = RNode()
+        ingestor = JSONFeed(root)
+        ingestor.feed('{"tags": ["a", "b", "c"]}')
+        ingestor.finish()
+        out = []
+        for tag in root["tags"]:
+            out.append(tag)
+        assert out == ["a", "b", "c"]
+
+
+class TestJsonTapManualFeed:
+    """Tests for JsonTap with manual feed/finish (no source)."""
+
+    def test_basic_feed_and_value(self):
+        tap = jsontap()
+        tap.feed('{"name": "Alice"}')
+        tap.finish()
+        assert tap["name"].value == "Alice"
+
+    def test_getitem_delegates_to_root(self):
+        tap = jsontap()
+        tap.feed('{"a": {"b": 1}}')
+        tap.finish()
+        assert tap["a"]["b"].value == 1
+        assert tap.root["a"]["b"].value == 1
+
+    def test_incremental_feed(self):
+        tap = jsontap()
+        tap.feed('{"na')
+        tap.feed('me":')
+        tap.feed('"Bob"}')
+        tap.finish()
+        assert tap["name"].value == "Bob"
+
+    def test_feed_and_sync_iterate(self):
+        tap = jsontap()
+        tap.feed('{"nums": [1, 2, 3]}')
+        tap.finish()
+        assert list(tap["nums"]) == [1, 2, 3]
+
+    async def test_feed_then_await(self):
+        tap = jsontap()
+        tap.feed('{"name": "Eve"}')
+        tap.finish()
+        assert await tap["name"] == "Eve"
+
+
+class TestJsonTapAsyncContextManager:
+    """Tests for async with jsontap(async_source)."""
+
+    async def test_basic_async_context(self):
+        async def source():
+            for chunk in ['{"name":', '"Alice",', '"age":30}']:
+                yield chunk
+
+        async with jsontap(source()) as root:
+            name = await root["name"]
+            age = await root["age"]
+        assert name == "Alice"
+        assert age == 30
+
+    async def test_stream_array_in_context(self):
+        async def source():
+            for chunk in ['{"items":[', '1,2,', '3]}']:
+                yield chunk
+                await asyncio.sleep(0)
+
+        async with jsontap(source()) as root:
+            items = []
+            async for item in root["items"]:
+                items.append(item)
+        assert items == [1, 2, 3]
+
+    async def test_partial_read_exits_cleanly(self):
+        async def source():
+            for chunk in ['{"a":1,"b":2,"c":3}']:
+                yield chunk
+
+        async with jsontap(source()) as root:
+            a = await root["a"]
+        assert a == 1
+
+    async def test_source_error_propagates_through_nodes(self):
+        async def bad_source():
+            yield '{"name":'
+            raise ValueError("connection lost")
+
+        with pytest.raises(ValueError, match="connection lost"):
+            async with jsontap(bad_source()) as root:
+                await root["name"]
+
+    async def test_no_source_async_context(self):
+        async with jsontap() as root:
+            pass
+
+    async def test_slow_source_with_live_consumption(self):
+        async def slow_source():
+            chunks = [
+                '{"intent":"refund",',
+                '"steps":["verify",',
+                '"check",',
+                '"refund"],',
+                '"done":true}',
+            ]
+            for c in chunks:
+                yield c
+                await asyncio.sleep(0)
+
+        async with jsontap(slow_source()) as root:
+            intent = await root["intent"]
+            assert intent == "refund"
+
+            steps = []
+            async for step in root["steps"]:
+                steps.append(step)
+            assert steps == ["verify", "check", "refund"]
+
+            done = await root["done"]
+            assert done is True
+
+
+class TestJsonTapSyncContextManager:
+    """Tests for with jsontap(sync_source)."""
+
+    def test_basic_sync_context(self):
+        chunks = ['{"name":', '"Alice",', '"age":30}']
+        with jsontap(chunks) as root:
+            assert root["name"].value == "Alice"
+            assert root["age"].value == 30
+
+    def test_sync_iterate_in_context(self):
+        chunks = ['{"items":[1,2,3]}']
+        with jsontap(chunks) as root:
+            assert list(root["items"]) == [1, 2, 3]
+
+    def test_sync_generator_source(self):
+        def gen():
+            yield '{"x":'
+            yield "42}"
+
+        with jsontap(gen()) as root:
+            assert root["x"].value == 42
+
+    def test_sync_context_no_source(self):
+        with jsontap() as root:
+            pass
+
+    def test_sync_context_with_bytes(self):
+        chunks = [b'{"k":', b'"v"}']
+        with jsontap(chunks) as root:
+            assert root["k"].value == "v"
+
+    def test_async_source_in_sync_context_raises(self):
+        async def async_gen():
+            yield '{"a": 1}'
+
+        with pytest.raises(TypeError, match="async"):
+            with jsontap(async_gen()) as root:
+                pass
+
+    def test_sync_context_bad_json(self):
+        chunks = ['{"name": ']
+        with pytest.raises(Exception):
+            with jsontap(chunks) as root:
+                pass
+
+    def test_nested_object_sync(self):
+        chunks = ['{"user":{"name":"Bob","scores":[10,20]}}']
+        with jsontap(chunks) as root:
+            assert root["user"]["name"].value == "Bob"
+            assert list(root["user"]["scores"]) == [10, 20]
+            assert root["user"].value == {"name": "Bob", "scores": [10, 20]}
