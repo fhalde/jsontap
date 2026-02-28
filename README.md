@@ -61,8 +61,7 @@ async def chat_completion():
         "steps": ["verify_order", "check_policy", "offer_refund"],
         "final_reply": "I reviewed your order... and approved a refund.",
     }
-    j = json.dumps(payload)
-    for c in j:
+    for c in json.dumps(payload):
         yield c
         await asyncio.sleep(0.1)
 
