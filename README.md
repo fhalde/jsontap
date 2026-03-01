@@ -45,7 +45,9 @@ summary = await response["summary"]
 print(f"[DONE] {summary}")
 ```
 
-This "looks" like sequential code waiting on a fully-parsed object. It isn't. Each `await` and `async for` resolves as the relevant part of the JSON arrives in the stream – `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to. The stream is being consumed progressively the whole time. your code just doesn't have to look like it.
+This "looks" like a logic you'd have written over a fully parsed JSON object. Here, the execution semantics are different.
+
+Each `await` and `async for` resolves as the relevant part of the JSON arrives in the stream – `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to. Your code is unfolding its logic as the stream progresses.
 
 This matters in practice because it means you can add streaming behavior to an agent without restructuring how you wrote it. If you have existing code that accesses a parsed JSON dict, the jsontap version looks almost identical.
 
