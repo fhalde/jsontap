@@ -24,9 +24,9 @@ Most agent frameworks handle structured JSON output in one of a few ways:
 - **One tool call at a time** – prompt the model to return a single tool call, execute it, then go back for the next. Clean, but fully sequential. You lose all parallelism.
 - **Newline-delimited hacks** – instruct the model to output one JSON object per line and split on `\n`. Brittle, prompt-dependent, and breaks with any formatting variation.
 
-jsontap eliminates these workarounds with a clean async API that sits directly on top of the stream.
+jsontap eliminates these workarounds with a clean async API built around a streaming JSON parser [ijson](https://github.com/ICRAR/ijson).
 
-## Your code stays sequential. Your execution doesn't have to be.
+## Sequential code, smarter execution.
 
 The typical alternative to buffering is callback-based or event-driven parsing – you register handlers that fire when certain keys arrive, and your logic gets split across multiple functions. It works, but it inverts how you naturally think about the problem.
 
@@ -45,61 +45,9 @@ summary = await response["summary"]
 print(f"[DONE] {summary}")
 ```
 
-This looks like sequential code waiting on a fully-parsed object. It isn't. Each `await` and `async for` resolves as the relevant part of the JSON arrives in the stream – `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to. The stream is being consumed progressively the whole time; your code just doesn't have to look like it.
+This "looks" like sequential code waiting on a fully-parsed object. It isn't. Each `await` and `async for` resolves as the relevant part of the JSON arrives in the stream – `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to. The stream is being consumed progressively the whole time. your code just doesn't have to look like it.
 
 This matters in practice because it means you can add streaming behavior to an agent without restructuring how you wrote it. If you have existing code that accesses a parsed JSON dict, the jsontap version looks almost identical.
-
-## Practical LLM example
-
-Suppose your model streams a response with multiple tool calls:
-
-```json
-{
-  "reasoning": "I need to look this up, check the file, and query the database.",
-  "calls": [
-    {
-      "tool": "search_web",
-      "args": {
-        "query": "Q3 earnings Apple"
-      }
-    },
-    {
-      "tool": "read_file",
-      "args": {
-        "path": "context.txt"
-      }
-    },
-    {
-      "tool": "query_db",
-      "args": {
-        "sql": "SELECT * FROM orders LIMIT 10"
-      }
-    }
-  ]
-}
-```
-
-Without jsontap, nothing happens until all three calls have been generated. With jsontap, each call is dispatched the moment its object finishes parsing – while the model is still generating the ones that follow:
-
-```python
-import asyncio
-from jsontap import jsontap
-
-async def agent():
-    response = jsontap(stream_from_llm())
-
-    # Optional: log reasoning as soon as it lands
-    reasoning = await response["reasoning"]
-    print(f"[PLAN] {reasoning}")
-
-    # Dispatch each tool call as it arrives – don't wait for all three
-    async for call in response["calls"]:
-        tool = await call["tool"]
-        args = await call["args"]
-        asyncio.create_task(dispatch(tool, args))
-```
-
-`calls[0]` starts executing while the model is still generating `calls[2]`. In a multi-step agent loop where tool calls hit real APIs or databases, this overlap compounds across every iteration.
 
 ## Other access patterns
 
@@ -122,7 +70,7 @@ async for result in response["results"].values():
     process(result)
 
 # Await the full array at once
-all_results = await response["results"]
+results = await response["results"]
 ```
 
 Nodes are created lazily and can be subscribed to before their part of the JSON has been parsed. Multiple consumers can `await` or iterate the same node – each gets the full result.
