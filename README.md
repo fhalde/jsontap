@@ -39,6 +39,7 @@ print(f"[PLAN] {reasoning}")
 async for call in response["calls"]:
     tool = await call["tool"]
     args = await call["args"]
+    # c = await call also works
     asyncio.create_task(dispatch(tool, args))
 
 summary = await response["summary"]
