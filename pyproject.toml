@@ -16,7 +16,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ijson>=3.5.0",
+    "ijson>=3.5.0"
 ]
 
 [build-system]
@@ -30,4 +30,7 @@ asyncio_mode = "auto"
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=0.23",
+]
+example = [
+    "openai>=2.24.0",
 ]

@@ -6,6 +6,8 @@ jsontap lets you `await` fields and iterate array item as soon as they appear �
 
 Built on [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
 
+A complete [example](https://github.com/fhalde/jsontap/tree/main/examples)
+
 ## Install
 
 ```bash
@@ -30,14 +32,14 @@ jsontap eliminates these workarounds with a clean async API built around a strea
 
 ## Sequential code, progressive execution.
 
-With jsontap, you write code that reads top-to-bottom, like you're accessing a fully parsed dict — except each line resolves as the data arrives:
+With jsontap, you write code that reads top-to-bottom, like you're accessing a fully parsed dict – except each line resolves as the data arrives:
 
 ```python
 # chat_completion() must be an async generator that yields chat completion chunks
 response = jsontap(chat_completion())
 
 reasoning = await response["reasoning"]
-print(f"[PLAN] {reasoning}")
+print(f"{reasoning}")
 
 async for call in response["calls"]:
     tool = await call["tool"]
@@ -45,14 +47,14 @@ async for call in response["calls"]:
     asyncio.create_task(dispatch(tool, args))
 
 summary = await response["summary"]
-print(f"[DONE] {summary}")
+print(f"{summary}")
 ```
+
+![jsontap streaming demo](show.gif)
 
 This looks like code you'd write against a fully parsed dict – but it isn't. Each `await` and `async for` resolves as the corresponding part of the JSON arrives in the stream. `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to.
 
 In practice, this means you can add streaming responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON dict, the jsontap version looks almost identical.
-
-A complete [example](https://github.com/fhalde/jsontap/tree/main/examples)
 
 ## Other access patterns
 
