@@ -1,18 +1,8 @@
 # jsontap
 
-Structured, awaitable access to streaming JSON sources.
+**Progressively start acting on structured output from an LLM as it streams.**
 
-Consume fields and array items as they arrive – no need to wait for the full payload. Built on top of streaming parsing from [ijson](https://github.com/ICRAR/ijson), you can `await` values or `async for` over arrays as the JSON arrives incrementally, making it ideal for LLM token streams.
-
-## Why Use jsontap?
-
-Traditional JSON parsing (e.g., `json.loads`) requires the complete payload before parsing and processing can continue, preventing progressive execution when working with streaming sources like LLM responses. 
-
-**jsontap** allows you to consume structured JSON while it is still streaming:
-
-- Await individual fields as they arrive
-- Async-iterate arrays in real time
-- Start responding before the full JSON is done
+jsontap lets you `await` individual fields and `async for` over arrays as the JSON streams in – so you can dispatch tool calls, update your UI, or trigger downstream logic the moment each piece arrives, while the model is still generating the rest.
 
 ## Install
 
@@ -26,162 +16,160 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add jsontap
 ```
 
-## Quick start
+## The problem with how agents work today
 
-### Practical LLM example
+Most agent frameworks handle structured JSON output in one of a few ways:
 
-LLM responses can have noticeable latency and can take a while to finish full structured output. With **jsontap**, your app can react as soon as key fields arrive.
+- **Buffer and parse** – wait for the full streamed response, then call `json.loads`. Simple, but you're leaving tool execution latency sitting idle during generation.
+- **One tool call at a time** – prompt the model to return a single tool call, execute it, then go back for the next. Clean, but fully sequential. You lose all parallelism.
+- **Newline-delimited hacks** – instruct the model to output one JSON object per line and split on `\n`. Brittle, prompt-dependent, and breaks with any formatting variation.
 
-Suppose your model streams JSON like:
+jsontap eliminates these workarounds with a clean async API that sits directly on top of the stream.
+
+## Your code stays sequential. Your execution doesn't have to be.
+
+The typical alternative to buffering is callback-based or event-driven parsing – you register handlers that fire when certain keys arrive, and your logic gets split across multiple functions. It works, but it inverts how you naturally think about the problem.
+
+jsontap takes a different approach. You write code that reads top-to-bottom, like you're just accessing a dict:
+
+```python
+reasoning = await response["reasoning"]
+print(f"[PLAN] {reasoning}")
+
+async for call in response["calls"]:
+    tool = await call["tool"]
+    args = await call["args"]
+    asyncio.create_task(dispatch(tool, args))
+
+summary = await response["summary"]
+print(f"[DONE] {summary}")
+```
+
+This looks like sequential code waiting on a fully-parsed object. It isn't. Each `await` and `async for` resolves as the relevant part of the JSON arrives in the stream – `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to. The stream is being consumed progressively the whole time; your code just doesn't have to look like it.
+
+This matters in practice because it means you can add streaming behavior to an agent without restructuring how you wrote it. If you have existing code that accesses a parsed JSON dict, the jsontap version looks almost identical.
+
+## Practical LLM example
+
+Suppose your model streams a response with multiple tool calls:
 
 ```json
 {
-  "intent": "refund_request",
-  "reply_preview": "I can help with that...",
-  "steps": ["verify_order", "check_policy", "offer_refund"],
-  "final_reply": "..."
+  "reasoning": "I need to look this up, check the file, and query the database.",
+  "calls": [
+    {
+      "tool": "search_web",
+      "args": {
+        "query": "Q3 earnings Apple"
+      }
+    },
+    {
+      "tool": "read_file",
+      "args": {
+        "path": "context.txt"
+      }
+    },
+    {
+      "tool": "query_db",
+      "args": {
+        "sql": "SELECT * FROM orders LIMIT 10"
+      }
+    }
+  ]
 }
 ```
 
-You can route and update UI early, then stream plan steps, without waiting for `final_reply`.
+Without jsontap, nothing happens until all three calls have been generated. With jsontap, each call is dispatched the moment its object finishes parsing – while the model is still generating the ones that follow:
 
 ```python
 import asyncio
 from jsontap import jsontap
-import json
-
-
-async def chat_completion():
-    payload = {
-        "intent": "refund_request",
-        "reply_preview": "I can help with that...",
-        "steps": ["verify_order", "check_policy", "offer_refund"],
-        "final_reply": "I reviewed your order... and approved a refund.",
-    }
-    for c in json.dumps(payload):
-        yield c
-        await asyncio.sleep(0.1)
-
 
 async def agent():
-    response = jsontap(chat_completion())
+    response = jsontap(stream_from_llm())
 
-    intent = await response["intent"]
-    print(f"[ROUTING] -> {intent}")
+    # Optional: log reasoning as soon as it lands
+    reasoning = await response["reasoning"]
+    print(f"[PLAN] {reasoning}")
 
-    preview = await response["reply_preview"]
-    print(f"[PREVIEW] {preview}")
-
-    async for step in response["steps"]:
-        print(f"[STEP] {await step}")
-
-    final_reply = await response["final_reply"]
-    print(f"[FINAL] {final_reply}")
-
-
-asyncio.run(agent())
+    # Dispatch each tool call as it arrives – don't wait for all three
+    async for call in response["calls"]:
+        tool = await call["tool"]
+        args = await call["args"]
+        asyncio.create_task(dispatch(tool, args))
 ```
 
-This is where `jsontap` stands out for LLM products: it enables immediate handling of fields, even as the rest of the JSON continues generating — all while letting developers write code that feels clean and sequential.
+`calls[0]` starts executing while the model is still generating `calls[2]`. In a multi-step agent loop where tool calls hit real APIs or databases, this overlap compounds across every iteration.
 
-![jsontap streaming demo](show.gif)
+## Other access patterns
 
-## How it works
-
-`jsontap()` returns a reactive root node (`AsyncJsonNode`). Depending on the source:
-
-- **Async iterable** — a background task starts immediately, parsing chunks as they arrive
-- **Sync iterable** — all chunks are consumed eagerly, values are resolved before you access them
-- **No source** — returns `(root, feed, finish)` for manual chunk-by-chunk feeding
-
-Each node supports these access patterns:
-
-| Pattern | Use case | Example |
-|---|---|---|
-| `await node` | Get the fully parsed value (scalar, dict, or list) | `name = await root["user"]["name"]` |
-| `async for item in node` | Stream array item handles (`AsyncJsonNode`) as each slot appears | `async for row in root["rows"]: ...` |
-| `async for value in node.values()` | Stream completed array values directly | `async for row in root["rows"].values(): ...` |
-| `node.value` | Synchronous access to a resolved value | `name = root["user"]["name"].value` |
-| `for item in node` | Synchronous iteration over a completed array | `for row in root["rows"]: ...` |
-
-Nodes are created lazily via `node["key"]` and can be subscribed to before the corresponding JSON has been parsed. Multiple consumers can `await` or iterate the same node concurrently — each gets the full result.
-
-### Arrays: handles vs. values vs. await
-
-Arrays support both patterns:
+jsontap supports several ways to consume nodes depending on what you need:
 
 ```python
-# Default async iteration yields item handles.
-async for item in root["logs"]:
-    if await item["type"] == "error":
-        alert(await item["message"])
+# Await a scalar field
+intent = await response["intent"]
 
-# If you want fully materialized values from async iteration:
-async for log in root["logs"].values():
-    process(log)
+# Await a nested value
+city = await response["user"]["address"]["city"]
 
-# Or await the full materialized list
-all_logs = await root["logs"]
+# Async-iterate array items as handles (access sub-fields per item)
+async for item in response["results"]:
+    score = await item["score"]
+    print(score)
+
+# Async-iterate array as fully materialized values
+async for result in response["results"].values():
+    process(result)
+
+# Await the full array at once
+all_results = await response["results"]
 ```
 
-### Nested access
+Nodes are created lazily and can be subscribed to before their part of the JSON has been parsed. Multiple consumers can `await` or iterate the same node – each gets the full result.
 
-Drill into the tree at any depth:
+## Manual feeding
+
+If you're managing your own stream (e.g., from a WebSocket or custom transport), you can feed chunks manually:
 
 ```python
-deep = await root["a"]["b"]["c"]["d"]
+root, feed, finish = jsontap()
+
+for chunk in my_stream:
+    feed(chunk)
+
+finish()
+
+result = await root["some_field"]
 ```
-
-Child nodes are created on first access, so you can subscribe before the parent has been fully parsed.
-
-## Replay behavior
-
-`jsontap` keeps streamed array items in memory so late subscribers can replay full history.
 
 ## Error handling
 
-- If the source raises, or the JSON is malformed, all pending `await`s and `async for` loops receive the exception immediately.
-- Accessing a key that doesn't exist in the parsed JSON raises `KeyError` once parsing is complete.
-- Calling `feed()` after `finish()` raises `RuntimeError`.
-- Accessing `.value` before a node is resolved raises `LookupError`.
-- Calling `for ... in node` before the stream is complete raises `RuntimeError`.
+| Situation | Behavior |
+|---|---|
+| Malformed JSON or source exception | All pending `await`s and `async for` loops receive the exception immediately |
+| Key not present in parsed JSON | `KeyError` raised once parsing is complete |
+| `.value` accessed before node resolves | `LookupError` |
+| `for ... in node` before stream finishes | `RuntimeError` |
+| `feed()` called after `finish()` | `RuntimeError` |
 
 ## API reference
 
 ### `jsontap(source=None)`
 
-Creates a reactive JSON root.
-
-**With an async source** — starts background parsing, returns `AsyncJsonNode`:
-
-```python
-root = jsontap(async_source)
-name = await root["user"]["name"]
-```
-
-**With a sync source** — parses eagerly, returns `AsyncJsonNode`:
-
-```python
-root = jsontap(sync_source)
-name = root["user"]["name"].value
-```
-
-**No source** — returns `(root, feed, finish)` tuple:
-
-```python
-root, feed, finish = jsontap()
-feed(chunk)
-finish()
-```
+| Source type | Behavior | Returns |
+|---|---|---|
+| Async iterable | Background parsing task starts immediately | `AsyncJsonNode` |
+| Sync iterable | Consumed eagerly, values resolved before access | `AsyncJsonNode` |
+| None | Manual chunk feeding mode | `(root, feed, finish)` |
 
 ### `AsyncJsonNode`
 
-| Method / Protocol | Description |
+| Pattern | Description |
 |---|---|
-| `node["key"]` | Get or create a child node for the given key |
-| `await node` | Await the resolved value (blocks until parsed) |
-| `async for item in node` | Iterate streamed array item handles (`AsyncJsonNode`) |
-| `async for value in node.values()` | Iterate streamed array values as they complete |
-| `node.value` | Synchronous access to the resolved value |
-| `for item in node` | Synchronous iteration over completed array items |
+| `node["key"]` | Get or create a child node |
+| `await node` | Block until value is resolved |
+| `async for item in node` | Stream array item handles as each slot is parsed |
+| `async for value in node.values()` | Stream fully materialized array values |
+| `node.value` | Synchronous access to a resolved value |
+| `for item in node` | Synchronous iteration over a completed array |
 | `node.resolved` | `True` if the node's value has been parsed |
