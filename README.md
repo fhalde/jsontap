@@ -2,7 +2,7 @@
 
 **Progressively start acting on structured output from an LLM as it streams.**
 
-jsontap lets you `await` individual fields and `async for` over arrays as the JSON streams in – so you can dispatch tool calls, update your UI, or trigger downstream logic the moment each piece arrives, while the model is still generating the rest.
+jsontap lets you `await` individual fields and `async for` over arrays as the JSON streams in – so you can dispatch tool calls, update interfaces, or trigger downstream logic the moment each piece arrives, while the model is still generating the rest.
 
 ## Install
 
