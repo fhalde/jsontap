@@ -32,7 +32,7 @@ jsontap eliminates these workarounds with a clean async API built around an iter
 
 ## Sequential code, progressive execution.
 
-With jsontap, you write code that reads top-to-bottom, like you're accessing a fully parsed dict – except each line resolves as the data arrives:
+With jsontap, you write code that reads top-to-bottom, like you're accessing a fully parsed JSON – except each line resolves as the data arrives:
 
 ```python
 response = jsontap(chat_completion())
@@ -49,13 +49,13 @@ summary = await response["summary"]
 print(f"{summary}")
 ```
 
-This looks like code you'd write against a fully parsed dict – but it isn't. Each `await` and `async for` resolves as the corresponding part of the JSON arrives in the stream. `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to.
+This looks like code you'd write against a fully parsed JSON – but it isn't. Each `await` and `async for` resolves as the corresponding part of the JSON arrives in the stream. `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to.
 
 Here's a showcase of the complete [example](https://github.com/fhalde/jsontap/tree/main/examples)
 
 ![jsontap streaming demo](show.gif)
 
-In practice, this means you can add responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON dict, the jsontap version looks almost identical.
+In practice, this means you can add responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON, the jsontap version looks almost identical.
 
 ## Other access patterns
 
