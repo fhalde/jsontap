@@ -6,7 +6,7 @@ jsontap lets you `await` fields and iterate array item as soon as they appear â€
 
 Built on [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
 
-For more details, here's the blog [post](https://fhalde.github.io/posts/jsontap/)
+For more details, here's the blog [post](https://fhalde.github.io/posts/jsontap/).
 
 ## Install
 
