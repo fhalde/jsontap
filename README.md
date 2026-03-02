@@ -1,12 +1,10 @@
 # jsontap
 
-**Progressively start acting on structured output from an LLM as it streams.**
+**Progressively consume structured output from an LLM as it streams.**
 
 jsontap lets you `await` fields and iterate array item as soon as they appear – without waiting for full JSON completion. Overlap model generation with execution: dispatch tool calls earlier, update interfaces sooner, and cut end-to-end latency.
 
 Built on [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
-
-A complete [example](https://github.com/fhalde/jsontap/tree/main/examples)
 
 ## Install
 
@@ -35,7 +33,6 @@ jsontap eliminates these workarounds with a clean async API built around a strea
 With jsontap, you write code that reads top-to-bottom, like you're accessing a fully parsed dict – except each line resolves as the data arrives:
 
 ```python
-# chat_completion() must be an async generator that yields chat completion chunks
 response = jsontap(chat_completion())
 
 reasoning = await response["reasoning"]
@@ -50,9 +47,11 @@ summary = await response["summary"]
 print(f"{summary}")
 ```
 
-![jsontap streaming demo](show.gif)
-
 This looks like code you'd write against a fully parsed dict – but it isn't. Each `await` and `async for` resolves as the corresponding part of the JSON arrives in the stream. `reasoning` unblocks the moment that field is parsed, the `calls` loop starts iterating before the array is complete, and `summary` waits only as long as it needs to.
+
+Here's a showcase of the complete [example](https://github.com/fhalde/jsontap/tree/main/examples)
+
+![jsontap streaming demo](show.gif)
 
 In practice, this means you can add streaming responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON dict, the jsontap version looks almost identical.
 
@@ -82,20 +81,9 @@ results = await response["results"]
 
 Nodes are created lazily and can be subscribed to before their part of the JSON has been parsed. Multiple consumers can `await` or iterate the same node – each gets the full result.
 
-## Manual feeding
+## Limitations
 
-If you're managing your own stream (e.g., from a WebSocket or custom transport), you can feed chunks manually:
-
-```python
-root, feed, finish = jsontap()
-
-for chunk in my_stream:
-    feed(chunk)
-
-finish()
-
-result = await root["some_field"]
-```
+1. String values cannot be iterated at the moment. See [issue](https://github.com/fhalde/jsontap/issues/5).
 
 ## Error handling
 

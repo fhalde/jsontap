@@ -33,4 +33,5 @@ dev = [
 ]
 example = [
     "openai>=2.24.0",
+    "rich>=13.7.0",
 ]
