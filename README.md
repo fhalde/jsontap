@@ -4,7 +4,7 @@
 
 jsontap lets you `await` fields and iterate array item as soon as they appear – without waiting for full JSON completion. Overlap model generation with execution: dispatch tool calls earlier, update interfaces sooner, and cut end-to-end latency.
 
-Built on top of [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
+Built on top of [ijson](https://github.com/ICRAR/ijson), it gives you an awaitable, path-oriented, instant access to your JSON payload so you can write sequential-looking code.
 
 For more details, here's the blog [post](https://fhalde.github.io/posts/jsontap/).
 
