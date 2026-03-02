@@ -4,7 +4,7 @@
 
 jsontap lets you `await` fields and iterate array item as soon as they appear – without waiting for full JSON completion. Overlap model generation with execution: dispatch tool calls earlier, update interfaces sooner, and cut end-to-end latency.
 
-Built on [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
+Built on top of [ijson](https://github.com/ICRAR/ijson), it gives you awaitable, path-oriented access to streaming JSON so you write sequential-looking code.
 
 For more details, here's the blog [post](https://fhalde.github.io/posts/jsontap/).
 
@@ -28,7 +28,7 @@ Most agent frameworks handle structured JSON output in one of a few ways:
 - **One tool call at a time** – prompt the model to return a single tool call, execute it, then go back for the next. Clean, but fully sequential. You lose all parallelism.
 - **Newline-delimited hacks** – instruct the model to output one JSON object per line and split on `\n`. Brittle, prompt-dependent, and breaks with any formatting variation.
 
-jsontap eliminates these workarounds with a clean async API built around a streaming JSON parser [ijson](https://github.com/ICRAR/ijson).
+jsontap eliminates these workarounds with a clean async API built around an iterative JSON parser [ijson](https://github.com/ICRAR/ijson).
 
 ## Sequential code, progressive execution.
 
@@ -55,7 +55,7 @@ Here's a showcase of the complete [example](https://github.com/fhalde/jsontap/tr
 
 ![jsontap streaming demo](show.gif)
 
-In practice, this means you can add streaming responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON dict, the jsontap version looks almost identical.
+In practice, this means you can add responsiveness to an agent without restructuring your code. If you already have logic that reads from a parsed JSON dict, the jsontap version looks almost identical.
 
 ## Other access patterns
 
