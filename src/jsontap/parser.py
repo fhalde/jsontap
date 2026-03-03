@@ -65,7 +65,6 @@ class AsyncParser:
         index = 0
         while True:
             _, event, value = await self._next_event()
-
             # recurse into object handling
             if event == "start_map":
                 arr.append(await self.parse_object((*prefix, index)))
@@ -100,7 +99,7 @@ def example():
         test_json = '{"name": "Alice", "age": 30, "tags": ["admin", "user"], "address": {"city": "NYC"}}'
 
         p = AsyncParser(simulate_stream(test_json))
-        await p.parse_value(())
+        await p.parse()
         print("\nResult:")
         for path, value in sorted(p._result.items(), key=lambda x: str(x[0])):
             print(f"  {path} -> {value!r}")
