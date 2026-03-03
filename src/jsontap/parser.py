@@ -3,6 +3,9 @@ from typing import Any
 
 import ijson
 
+from jsontap.frontend import AsyncJsonNode
+from jsontap.store import Store
+
 
 class AsyncIterableFileLike:
     def __init__(self, stream):
@@ -19,30 +22,35 @@ class AsyncIterableFileLike:
 
 
 class AsyncParser:
-    def __init__(self, stream):
+    def __init__(self, stream, store: Store):
         self._events = ijson.parse_async(AsyncIterableFileLike(stream))
         self._result = {}
+        self._store = store
 
     async def _next_event(self):
         return await anext(self._events)
 
     async def parse(self):
-        return await self.parse_value(())
+        asyncio.create_task(self.parse_value(()))
+        return AsyncJsonNode((), self._store)
 
     async def parse_value(self, prefix: tuple[str | int, ...]) -> Any:
         _, event, value = await self._next_event()
         # recurse into object handling
         if event == "start_map":
             node = await self.parse_object(prefix)
+            self._store.set(prefix, node)
             self._result[prefix] = node
             return node
         # recurse into array handling
         elif event == "start_array":
             node = await self.parse_array(prefix)
+            self._store.set(prefix, node)
             self._result[prefix] = node
             return node
         # primitives
         else:
+            self._store.set(prefix, value)
             self._result[prefix] = value
             return value
 
@@ -57,6 +65,7 @@ class AsyncParser:
             elif event == "end_map":
                 break
 
+        self._store.set(prefix, obj)
         self._result[prefix] = obj
         return obj
 
@@ -79,9 +88,11 @@ class AsyncParser:
             # primitives
             else:
                 arr.append(value)
+                self._store.set((*prefix, index), value)
                 self._result[(*prefix, index)] = value  # noqa: B904
                 index += 1
 
+        self._store.set(prefix, arr)
         self._result[prefix] = arr
         return arr
 

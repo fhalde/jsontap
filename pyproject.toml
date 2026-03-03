@@ -16,7 +16,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ijson>=3.5.0"
+    "attr>=0.3.2",
+    "ijson>=3.5.0",
 ]
 
 [build-system]
