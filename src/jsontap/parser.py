@@ -4,7 +4,7 @@ from typing import Any
 import ijson
 
 from jsontap.frontend import AsyncJsonNode
-from jsontap.store import Store
+from jsontap.store import PathStore
 
 
 class AsyncIterableFileLike:
@@ -22,7 +22,7 @@ class AsyncIterableFileLike:
 
 
 class AsyncParser:
-    def __init__(self, stream, store: Store):
+    def __init__(self, stream, store: PathStore):
         self._events = ijson.parse_async(AsyncIterableFileLike(stream))
         self._result = {}
         self._store = store

@@ -4,20 +4,56 @@ from collections import defaultdict
 from attrs import define, field
 
 
+"""
+for arrays,
+
+when a user does
+
+async for x in j["arr"]:
+
+__aiter__ is called
+__anext__ is called
+
+__anext__ starts at i = 0
+
+it blocks if i <= len(arr)
+
+when a item is added (primitive, start array, start map)
+arr is extended to len(arr) + 1
+__anext__ must be resumed to return a AsyncJsonNode((*path, i))
+
+
+{
+    "seq": true/false
+    "future": <fut>
+    "val": val
+}
+
+"""
+
+
 @define
-class NodeState:
+class UNSET:
+    pass
+
+
+# good to split pathstate and seqstate. the overloading and if conditionals is a threat to sanity
+@define
+class PathState:
     future = field(factory=lambda: asyncio.get_running_loop().create_future())
-    exception: Exception | None = field(default=None)
+    sealed: bool = False
+    updated = field(factory=lambda: asyncio.Event())
+    val: Any = field(default=UNSET)
 
 
 Path = tuple[str | int, ...]
 
 
-class Store:
+class PathStore:
     def __init__(self):
-        self.nodes: dict[Path, NodeState] = defaultdict(NodeState)
+        self.nodes: dict[Path, PathState] = defaultdict(PathState)
 
-    def getdefault(self, path: Path) -> NodeState:
+    def get(self, path: Path) -> PathState:
         return self.nodes[path]
 
     def set(self, path: Path, value: Any) -> None:
@@ -28,4 +64,16 @@ class Store:
                 f"Path {path} already has a value: {self.nodes[path].value}"
             )
         else:
+            self.nodes[path].val = value
             self.nodes[path].future.set_result(value)
+
+    def begin_item(self, path: Path) -> None:
+        if self.nodes[path].val == UNSET:
+            self.nodes[path].val = [UNSET]
+        else:
+            self.nodes[path].val.append(UNSET)
+        self.nodes[path].updated.set()
+        self.nodes[path].updated.clear()
+
+    def setitem(self, path: Path, index: int, value: Any) -> None:
+        pass

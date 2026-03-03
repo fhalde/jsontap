@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from .store import Store
+from .store import PathStore
 from .parser import AsyncParser
 
 
@@ -28,7 +28,7 @@ class FakeChatCompletion:
 
 async def main():
     def jsontap(s):
-        store = Store()
+        store = PathStore()
         parser = AsyncParser(s, store)
         asyncio.create_task(parser.parse_value(()))
         return parser.parse()
@@ -44,9 +44,13 @@ async def main():
     }
     stream = FakeChatCompletion(json.dumps(d), chunk_size=3)
     parser = jsontap(stream)
+
+    async for i in parser["user"]["scores"]:
+        print("item is here!!")
+        print(i)
     print(await parser["user"]["name"])
     print(await parser["user"]["age"])
-    print(await parser["user"]["scores"][1])
+    print(await parser["user"]["scores"])
     print(await parser["user"]["children"][0]["name"])
     print(await parser["user"]["children"][1]["age"])
     print(await parser["user"]["address"]["state"])
