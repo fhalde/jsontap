@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 from .store import Store
 from .parser import AsyncParser
@@ -20,7 +21,7 @@ class FakeChatCompletion:
             raise StopAsyncIteration
         chunk = self._data[self._i : self._i + self._chunk_size]
         self._i += self._chunk_size
-        print(repr(chunk), flush=True)
+        # print(repr(chunk), flush=True)
         await asyncio.sleep(0.1)
         return chunk
 
@@ -32,9 +33,22 @@ async def main():
         asyncio.create_task(parser.parse_value(()))
         return parser.parse()
 
-    stream = FakeChatCompletion('{"name": "Alice"}', chunk_size=3)
+    d = {
+        "user": {
+            "name": "Alice",
+            "age": 30,
+            "address": {"city": "NYC", "state": "NY", "zip": "10001"},
+        }
+    }
+    stream = FakeChatCompletion(json.dumps(d), chunk_size=3)
     parser = jsontap(stream)
-    print(await parser["name"])
+    print(await parser["user"]["name"])
+    print(await parser["user"]["age"])
+    print(await parser["user"]["address"]["state"])
+    print(await parser["user"]["address"]["city"])
+    print(await parser["user"]["address"]["zip"])
+    print(await parser["user"]["address"])
+    print(await parser["user"])
 
 
 if __name__ == "__main__":
