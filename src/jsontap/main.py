@@ -37,6 +37,8 @@ async def main():
         "user": {
             "name": "Alice",
             "age": 30,
+            "scores": [10, 20, 30],
+            "children": [{"name": "Bob", "age": 10}, {"name": "Charlie", "age": 12}],
             "address": {"city": "NYC", "state": "NY", "zip": "10001"},
         }
     }
@@ -44,6 +46,9 @@ async def main():
     parser = jsontap(stream)
     print(await parser["user"]["name"])
     print(await parser["user"]["age"])
+    print(await parser["user"]["scores"][1])
+    print(await parser["user"]["children"][0]["name"])
+    print(await parser["user"]["children"][1]["age"])
     print(await parser["user"]["address"]["state"])
     print(await parser["user"]["address"]["city"])
     print(await parser["user"]["address"]["zip"])

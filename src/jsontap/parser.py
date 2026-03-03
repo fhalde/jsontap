@@ -94,27 +94,3 @@ class AsyncParser:
         self._store.set(prefix, arr)
         self._result[prefix] = arr
         return arr
-
-
-def example():
-    async def simulate_stream(json_str: str, chunk_size: int = 3):
-        """Simulate an LLM streaming JSON character-by-character (or in small chunks)."""
-        for i in range(0, len(json_str), chunk_size):
-            chunk = json_str[i : i + chunk_size]
-            print(repr(chunk), flush=True)
-            await asyncio.sleep(0.1)
-            yield chunk
-
-    async def main():
-        test_json = '{"name": "Alice", "age": 30, "tags": ["admin", "user"], "address": {"city": "NYC"}}'
-
-        p = AsyncParser(simulate_stream(test_json))
-        await p.parse()
-        print("\nResult:")
-        for path, value in sorted(p._result.items(), key=lambda x: str(x[0])):
-            print(f"  {path} -> {value!r}")
-
-    asyncio.run(main())
-
-
-# example()
