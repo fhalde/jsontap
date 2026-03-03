@@ -41,7 +41,7 @@ class UNSET:
 @define
 class PathState:
     future = field(factory=lambda: asyncio.get_running_loop().create_future())
-    sealed: bool = False
+    sealed: bool = field(default=False)
     updated = field(factory=lambda: asyncio.Event())
     val: Any = field(default=UNSET)
 
@@ -59,13 +59,13 @@ class PathStore:
     def set(self, path: Path, value: Any) -> None:
         # this case is not possible, but it's llm and we are parsing partial jsons live
         # check why root is set twice
-        if self.nodes[path].future.done():
-            raise ValueError(
-                f"Path {path} already has a value: {self.nodes[path].value}"
-            )
+        state = self.nodes[path]
+        if state.future.done():
+            raise ValueError(f"Path {path} already has a value: {state.val}")
         else:
-            self.nodes[path].val = value
-            self.nodes[path].future.set_result(value)
+            state.val = value
+            state.sealed = True
+            state.future.set_result(value)
 
     def _setclear(self, e: asyncio.Event):
         e.set()

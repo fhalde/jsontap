@@ -46,8 +46,7 @@ async def main():
     parser = jsontap(stream)
 
     async for i in parser["user"]["scores"]:
-        print("item is here!!")
-        print(i)
+        print(await i)
     print(await parser["user"]["name"])
     print(await parser["user"]["age"])
     print(await parser["user"]["scores"])

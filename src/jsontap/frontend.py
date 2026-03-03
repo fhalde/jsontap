@@ -1,4 +1,4 @@
-from .store import UNSET, PathState, PathStore
+from .store import UNSET, PathStore
 
 
 class AsyncJsonNode:
@@ -20,20 +20,19 @@ class AsyncJsonNode:
 
 class Cursor:
     def __init__(self, path, store: PathStore) -> None:
-        self.i = 0
+        self.index = 0
         self.path = path
         self.store = store
 
     async def __anext__(self):
         state = self.store.get(self.path)
-        while state.val == UNSET:
-            await state.updated.wait()
-        if (curr := self.i) < len(state.val):
-            self.i += 1
-            return AsyncJsonNode((*self.path, curr), self.store)
-        # caught up
-        else:
-            # array closed
-            if state.sealed:
+        while True:
+            while state.val == UNSET:
+                await state.updated.wait()
+            curr = self.index
+            N = len(state.val)
+            consumed = curr == N
+            if state.sealed and consumed:
                 raise StopAsyncIteration
-            await state.updated.wait()
+            self.index += 1
+            return AsyncJsonNode((*self.path, curr), self.store)

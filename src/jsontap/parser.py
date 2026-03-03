@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any
 
 import ijson
@@ -73,6 +72,7 @@ class AsyncParser:
         index = 0
         while True:
             _, event, value = await self._next_event()
+            self._store.begin_item(prefix)
             # recurse into object handling
             if event == "start_map":
                 arr.append(await self.parse_object((*prefix, index)))
