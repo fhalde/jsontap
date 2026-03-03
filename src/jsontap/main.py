@@ -4,7 +4,7 @@ from .store import Store
 from .parser import AsyncParser
 
 
-class SimulatedStream:
+class FakeChatCompletion:
     """Mimics real API streams (class-based async iterator, not async generator)."""
 
     def __init__(self, data: str, chunk_size: int = 1):
@@ -32,7 +32,7 @@ async def main():
         asyncio.create_task(parser.parse_value(()))
         return parser.parse()
 
-    stream = SimulatedStream('{"name": "Alice"}', chunk_size=3)
+    stream = FakeChatCompletion('{"name": "Alice"}', chunk_size=3)
     parser = jsontap(stream)
     print(await parser["name"])
 
