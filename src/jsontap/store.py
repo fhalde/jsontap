@@ -67,13 +67,16 @@ class PathStore:
             self.nodes[path].val = value
             self.nodes[path].future.set_result(value)
 
+    def _setclear(self, e: asyncio.Event):
+        e.set()
+        e.clear()
+
     def begin_item(self, path: Path) -> None:
-        if self.nodes[path].val == UNSET:
-            self.nodes[path].val = [UNSET]
-        else:
-            self.nodes[path].val.append(UNSET)
-        self.nodes[path].updated.set()
-        self.nodes[path].updated.clear()
+        state = self.nodes[path]
+        if state.val == UNSET:
+            state.val = []
+        state.val += [UNSET]
+        self._setclear(self.nodes[path].updated)
 
     def setitem(self, path: Path, index: int, value: Any) -> None:
         pass
