@@ -51,15 +51,15 @@ Path = tuple[str | int, ...]
 
 class PathStore:
     def __init__(self):
-        self.nodes: dict[Path, PathState] = defaultdict(PathState)
+        self._nodes: dict[Path, PathState] = defaultdict(PathState)
 
     def get(self, path: Path) -> PathState:
-        return self.nodes[path]
+        return self._nodes[path]
 
     def set(self, path: Path, value: Any) -> None:
         # this case is not possible, but it's llm and we are parsing partial jsons live
         # check why root is set twice
-        state = self.nodes[path]
+        state = self._nodes[path]
         if state.future.done():
             raise ValueError(f"Path {path} already has a value: {state.val}")
         else:
@@ -72,11 +72,11 @@ class PathStore:
         e.clear()
 
     def begin_item(self, path: Path) -> None:
-        state = self.nodes[path]
+        state = self._nodes[path]
         if state.val == UNSET:
             state.val = []
         state.val += [UNSET]
-        self._setclear(self.nodes[path].updated)
+        self._setclear(self._nodes[path].updated)
 
     def setitem(self, path: Path, index: int, value: Any) -> None:
         pass
