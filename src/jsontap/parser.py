@@ -38,14 +38,14 @@ class AsyncParser:
         # recurse into object handling
         if event == "start_map":
             node = await self.parse_object(prefix)
-            self._store.set(prefix, node)
-            self._result[prefix] = node
+            # self._store.set(prefix, node)
+            # self._result[prefix] = node
             return node
         # recurse into array handling
         elif event == "start_array":
             node = await self.parse_array(prefix)
-            self._store.set(prefix, node)
-            self._result[prefix] = node
+            # self._store.set(prefix, node)
+            # self._result[prefix] = node
             return node
         # primitives
         else:

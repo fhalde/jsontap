@@ -22,6 +22,7 @@ class Store:
 
     def set(self, path: Path, value: Any) -> None:
         # this case is not possible, but it's llm and we are parsing partial jsons live
+        # check why root is set twice
         if self.nodes[path].future.done():
             raise ValueError(
                 f"Path {path} already has a value: {self.nodes[path].value}"
