@@ -45,8 +45,8 @@ async def main():
     stream = FakeChatCompletion(json.dumps(d), chunk_size=3)
     parser = jsontap(stream)
 
-    async for i in parser["user"]["scores"]:
-        print(await i)
+    async for i in parser["user"]["children"]:
+        print(await i["name"])
     print(await parser["user"]["name"])
     print(await parser["user"]["age"])
     print(await parser["user"]["scores"])

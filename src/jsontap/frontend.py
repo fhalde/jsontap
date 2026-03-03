@@ -34,5 +34,8 @@ class Cursor:
             consumed = curr == N
             if state.sealed and consumed:
                 raise StopAsyncIteration
-            self.index += 1
-            return AsyncJsonNode((*self.path, curr), self.store)
+            if curr < N:
+                self.index += 1
+                return AsyncJsonNode((*self.path, curr), self.store)
+            else:
+                await state.updated.wait()
