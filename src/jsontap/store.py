@@ -1,17 +1,13 @@
 import asyncio
 from typing import Any
 from collections import defaultdict
+from attrs import define, field
 
 
-import attr
-
-
-@attr
+@define
 class NodeState:
-    future: asyncio.Future[Any] = attr.field(
-        default=asyncio.get_running_loop().create_future()
-    )
-    exception: Exception | None = attr.field(default=None)
+    future = field(factory=lambda: asyncio.get_running_loop().create_future())
+    exception: Exception | None = field(default=None)
 
 
 Path = tuple[str | int, ...]
@@ -22,7 +18,7 @@ class Store:
         self.nodes: dict[Path, NodeState] = defaultdict(NodeState)
 
     def getdefault(self, path: Path) -> NodeState:
-        return self.nodes[path].future
+        return self.nodes[path]
 
     def set(self, path: Path, value: Any) -> None:
         # this case is not possible, but it's llm and we are parsing partial jsons live

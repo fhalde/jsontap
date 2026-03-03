@@ -10,6 +10,6 @@ class AsyncJsonNode:
         return AsyncJsonNode(path=(*self.path, key), store=self.store)
 
     def __await__(self):
-        return self.store.getdefault(self.path).__await__()
+        return self.store.getdefault(self.path).future.__await__()
 
     __str__ = __repr__ = lambda self: f"({self.path})"

@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "attr>=0.3.2",
+    "attrs>=25.4.0",
     "ijson>=3.5.0",
 ]
 

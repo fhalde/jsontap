@@ -5,18 +5,20 @@ from .parser import AsyncParser
 
 
 async def main():
-    async def simulate_stream(json_str: str):
+    def jsontap(s):
+        store = Store()
+        parser = AsyncParser(s, store)
+        asyncio.create_task(parser.parse_value(()))
+        return parser.parse()
+
+    async def chat_completion(json_str: str):
         for char in json_str:
             print(char, end="", flush=True)
             yield char
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
-    store = Store()
-
-    parser = AsyncParser(simulate_stream('{"name": "Alice"}'), store)
-    json = parser.parse()
-
-    print(await json["name"])
+    parser = jsontap(chat_completion('{"name": "Alice"}'))
+    print(await parser["name"])
 
 
 if __name__ == "__main__":

@@ -30,8 +30,7 @@ class AsyncParser:
     async def _next_event(self):
         return await anext(self._events)
 
-    async def parse(self):
-        asyncio.create_task(self.parse_value(()))
+    def parse(self):
         return AsyncJsonNode((), self._store)
 
     async def parse_value(self, prefix: tuple[str | int, ...]) -> Any:
