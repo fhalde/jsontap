@@ -12,6 +12,14 @@ class AsyncJsonNode:
     def __await__(self):
         return self._store.get(self._path).future.__await__()
 
+    def values(self):
+        async def gen():
+            async for item in self:
+                yield await item
+            return
+
+        return gen()
+
     def __aiter__(self):
         return Cursor(self._path, self._store)
 
