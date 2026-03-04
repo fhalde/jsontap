@@ -59,6 +59,8 @@ class AsyncParser:
         index = 0
         while True:
             _, event, value = await self._next_event()
+            if event == "end_array":
+                break
             self._store.begin_item(prefix)
             # recurse into object handling
             if event == "start_map":
@@ -68,9 +70,6 @@ class AsyncParser:
             elif event == "start_array":
                 arr.append(await self.parse_array((*prefix, index)))
                 index += 1
-            # done with this array, return the result
-            elif event == "end_array":
-                break
             # primitives
             else:
                 arr.append(value)
