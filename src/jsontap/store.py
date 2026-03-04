@@ -57,9 +57,8 @@ class PathStore:
         return self._nodes[path]
 
     def set(self, path: Path, value: Any) -> None:
-        # this case is not possible, but it's llm and we are parsing partial jsons live
-        # check why root is set twice
         state = self._nodes[path]
+        # this case is not possible, but it's llm and we are parsing partial json
         if state.future.done():
             raise ValueError(f"Path {path} already has a value: {state.val}")
         else:
@@ -68,8 +67,7 @@ class PathStore:
             state.future.set_result(value)
 
     def _setclear(self, e: asyncio.Event):
-        e.set()
-        e.clear()
+        e.set(), e.clear()
 
     def begin_item(self, path: Path) -> None:
         state = self._nodes[path]

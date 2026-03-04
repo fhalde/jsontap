@@ -1,63 +1,109 @@
 import asyncio
-import json
 
-from .store import PathStore
+from openai import AsyncStream
+from openai.types.chat import ChatCompletionChunk
+
+from .frontend import AsyncJsonNode
 from .parser import AsyncParser
+from .store import PathStore
 
 
-class FakeChatCompletion:
-    """Mimics real API streams (class-based async iterator, not async generator)."""
+def jsontap(s: AsyncStream[ChatCompletionChunk]):
+    store = PathStore()
+    parser = AsyncParser(store)
 
-    def __init__(self, data: str, chunk_size: int = 1):
-        self._data = data
-        self._chunk_size = chunk_size
-        self._i = 0
+    async def feed():
+        async for chunk in s:
+            if chunk.choices and (delta := chunk.choices[0].delta) and delta.content:
+                parser.feed(delta.content)
 
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self) -> str:
-        if self._i >= len(self._data):
-            raise StopAsyncIteration
-        chunk = self._data[self._i : self._i + self._chunk_size]
-        self._i += self._chunk_size
-        # print(repr(chunk), flush=True)
-        await asyncio.sleep(0.1)
-        return chunk
+    asyncio.create_task(feed())
+    asyncio.create_task(parser.parse())
+    return AsyncJsonNode((), store)
 
 
+"""
 async def main():
-    def jsontap(s):
-        store = PathStore()
-        parser = AsyncParser(s, store)
-        asyncio.create_task(parser.parse_value(()))
-        return parser.parse()
-
-    d = {
-        "user": {
-            "name": "Alice",
-            "age": 30,
-            "scores": [10, 20, 30],
-            "children": [{"name": "Bob", "age": 10}, {"name": "Charlie", "age": 12}],
-            "address": {"city": "NYC", "state": "NY", "zip": "10001"},
-        }
+    SCHEMA = {
+        "type": "object",
+        "properties": {
+            "user": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "age": {"type": "integer"},
+                    "scores": {"type": "array", "items": {"type": "integer"}},
+                    "children": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "age": {"type": "integer"},
+                            },
+                            "required": ["name", "age"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "address": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string"},
+                            "state": {"type": "string"},
+                            "zip": {"type": "string"},
+                        },
+                        "required": ["city", "state", "zip"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["name", "age", "scores", "children", "address"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["user"],
+        "additionalProperties": False,
     }
-    stream = FakeChatCompletion(json.dumps(d), chunk_size=3)
-    parser = jsontap(stream)
+    client = AsyncOpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY"),
+        base_url=os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1"),
+    )
 
-    async for i in parser["user"]["children"]:
-        print(await i["name"])
-    print(await parser["user"]["name"])
-    print(await parser["user"]["age"])
-    print(await parser["user"]["scores"])
-    print(await parser["user"]["children"][0]["name"])
-    print(await parser["user"]["children"][1]["age"])
-    print(await parser["user"]["address"]["state"])
-    print(await parser["user"]["address"]["city"])
-    print(await parser["user"]["address"]["zip"])
-    print(await parser["user"]["address"])
-    print(await parser["user"])
+    stream = await client.chat.completions.create(
+        model="nvidia/nemotron-3-nano-30b-a3b:free",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Generate a realistic user profile matching the provided JSON schema. "
+                    "Include at least 3 scores and at least 2 children. Respond only with valid JSON."
+                ),
+            },
+        ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "user_profile",
+                "strict": True,
+                "schema": SCHEMA,
+            },
+        },
+        stream=True,
+    )
+
+    json = jsontap(stream)
+    async for child in json["user"]["children"]:
+        print(f"  child: {await child['name']}, age {await child['age']}")
+
+    print("name:", await json["user"]["name"])
+    print("age:", await json["user"]["age"])
+    print("scores:", await json["user"]["scores"])
+    print("city:", await json["user"]["address"]["city"])
+    print("state:", await json["user"]["address"]["state"])
+    print("zip:", await json["user"]["address"]["zip"])
+    print("user:", await json["user"])
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+"""
