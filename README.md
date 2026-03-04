@@ -86,6 +86,8 @@ Nodes are created lazily and can be subscribed to before their part of the JSON 
 ## Limitations
 
 1. String values cannot be iterated at the moment. See [issue](https://github.com/fhalde/jsontap/issues/5).
+2. This is not a general-purpose JSON library.
+3. There's no support for custom field decoders (e.g., to parse dates).
 
 ## Error handling
 
@@ -99,13 +101,11 @@ Nodes are created lazily and can be subscribed to before their part of the JSON 
 
 ## API reference
 
-### `jsontap(source=None)`
+### `jsontap(stream) -> AsyncJsonNode`
 
 | Source type | Behavior | Returns |
 |---|---|---|
-| Async iterable | Background parsing task starts immediately | `AsyncJsonNode` |
-| Sync iterable | Consumed eagerly, values resolved before access | `AsyncJsonNode` |
-| None | Manual chunk feeding mode | `(root, feed, finish)` |
+| `AsyncStream[ChatCompletionChunk]` | Background parsing task starts immediately | `AsyncJsonNode` |
 
 ### `AsyncJsonNode`
 
@@ -115,6 +115,3 @@ Nodes are created lazily and can be subscribed to before their part of the JSON 
 | `await node` | Block until value is resolved |
 | `async for item in node` | Stream array item handles as each slot is parsed |
 | `async for value in node.values()` | Stream fully materialized array values |
-| `node.value` | Synchronous access to a resolved value |
-| `for item in node` | Synchronous iteration over a completed array |
-| `node.resolved` | `True` if the node's value has been parsed |
