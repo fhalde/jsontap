@@ -52,7 +52,6 @@ async def chat_completion_stream(client: AsyncOpenAI):
         },
         stream=True,
     )
-
     return stream
 
 
@@ -64,7 +63,13 @@ async def main():
 
     print("🚀 Starting ticket triage stream...")
     stream = await chat_completion_stream(client)
-    response = jsontap(stream)
+
+    async def stream_wrapper():
+        async for chunk in stream:
+            if chunk.choices and (delta := chunk.choices[0].delta) and delta.content:
+                yield delta.content
+
+    response = jsontap(stream_wrapper())
 
     category, urgency = await asyncio.gather(
         response["category"],
