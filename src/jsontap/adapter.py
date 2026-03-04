@@ -4,9 +4,8 @@ class AsyncIterableFileLike:
 
     async def read(self, n=-1):
         if n == 0:
-            return b""
+            return ""
         try:
-            chunk = await anext(self._iter)
-            return chunk.encode("utf-8") if isinstance(chunk, str) else chunk
+            return await anext(self._iter)
         except StopAsyncIteration:
-            return b""
+            return ""
