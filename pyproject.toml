@@ -1,6 +1,6 @@
 [project]
 name = "jsontap"
-version = "0.6.0"
+version = "0.6.1"
 description = "Structured, awaitable access to streaming JSON sources."
 readme = "README.md"
 authors = [
@@ -16,7 +16,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "attr>=0.3.2",
     "attrs>=25.4.0",
     "ijson>=3.5.0",
 ]

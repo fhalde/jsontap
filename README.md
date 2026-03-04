@@ -105,7 +105,7 @@ Nodes are created lazily and can be subscribed to before their part of the JSON 
 
 | Source type | Behavior | Returns |
 |---|---|---|
-| `AsyncStream[ChatCompletionChunk]` | Background parsing task starts immediately | `AsyncJsonNode` |
+| `AsyncIterable[str]` | Background parsing task starts immediately | `AsyncJsonNode` |
 
 ### `AsyncJsonNode`
 
