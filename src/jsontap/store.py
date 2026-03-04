@@ -64,6 +64,7 @@ class PathStore:
         else:
             state.val = value
             state.sealed = True
+            self._setclear(state.updated)
             state.future.set_result(value)
 
     def _setclear(self, e: asyncio.Event):
@@ -74,7 +75,7 @@ class PathStore:
         if state.val == UNSET:
             state.val = []
         state.val += [UNSET]
-        self._setclear(self._nodes[path].updated)
+        self._setclear(state.updated)
 
     def setitem(self, path: Path, index: int, value: Any) -> None:
         pass
