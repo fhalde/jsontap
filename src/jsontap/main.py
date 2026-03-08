@@ -26,14 +26,8 @@ def jsontap(stream: AsyncIterable[str]) -> AsyncJsonNode:
         - one task parses events and resolves node futures
     """
     store = PathStore()
-    parser = AsyncParser(store)
+    parser = AsyncParser(store, stream)
 
-    async def feed():
-        async for chunk in stream:
-            if chunk:
-                parser.feed(chunk)
-
-    asyncio.create_task(feed())
     asyncio.create_task(parser.parse())
     return AsyncJsonNode((), store)
 

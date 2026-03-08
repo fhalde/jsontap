@@ -1,29 +1,26 @@
 from typing import Any
 
-import asyncio
 import ijson
+from collections.abc import AsyncIterable
 
 from .store import PathStore
 
 
 class AsyncParser:
-    def __init__(self, store: PathStore):
+    def __init__(self, store: PathStore, chunks: AsyncIterable[str]):
+        self._chunks = chunks
         self._events = ijson.sendable_list()
         self._coro = ijson.parse_coro(self._events)
-        self._queue = asyncio.Queue()
         self._store = store
 
     async def parse(self):
         return await self.parse_value(())
 
     async def _next_event(self) -> tuple[str, str, Any]:
-        return await self._queue.get()
-
-    def feed(self, chunk: str) -> None:
-        self._coro.send(chunk.encode("utf-8"))
-        for e in self._events:
-            self._queue.put_nowait(e)
-        del self._events[:]
+        while not self._events:
+            chunk = await anext(self._chunks)
+            self._coro.send(chunk.encode("utf-8"))
+        return self._events.pop(0)
 
     async def parse_value(self, prefix: tuple[str | int, ...]) -> Any:
         _, event, value = await self._next_event()
