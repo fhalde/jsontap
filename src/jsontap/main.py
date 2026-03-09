@@ -28,7 +28,7 @@ def jsontap(stream: AsyncIterable[str]) -> AsyncJsonNode:
     store = PathStore()
     parser = AsyncParser(store, stream)
 
-    asyncio.create_task(parser.parse())
+    asyncio.create_task(parser.parse(), name="parser.parse")
     return AsyncJsonNode((), store)
 
 

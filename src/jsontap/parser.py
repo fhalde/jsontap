@@ -1,6 +1,6 @@
 from typing import Any
-
 import ijson
+
 from collections.abc import AsyncIterable
 
 from .store import PathStore
@@ -14,7 +14,27 @@ class AsyncParser:
         self._store = store
 
     async def parse(self):
-        return await self.parse_value(())
+        try:
+            json = await self.parse_value(())
+            # needs refactoring
+            for path, state in self._store._nodes.items():
+                if not state.future.done():
+                    if isinstance(path[-1], int):
+                        state.future.exception(IndexError("list index out of range"))
+                    else:
+                        state.future.exception(KeyError(".".join(path)))
+            return json
+        except StopAsyncIteration:
+            for path, state in self._store._nodes.items():
+                if not state.future.done():
+                    state.future.exception(
+                        Exception(
+                            {
+                                "cause": "decode.error",
+                                "message": "Unexpected end of JSON input",
+                            }
+                        )
+                    )
 
     async def _next_event(self) -> tuple[str, str, Any]:
         while not self._events:
